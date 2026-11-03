@@ -9,6 +9,7 @@ import { fromLocalInputValue, toLocalInputValue } from "@/lib/datetime";
 import { getCurrentPosition, type GeoResult } from "@/lib/geolocation";
 import { getIncident, updateIncident } from "@/lib/incidents";
 import type { Incident } from "@/lib/types";
+import { useFlushOnUnmount } from "@/lib/use-flush-on-unmount";
 import { cn } from "@/lib/utils";
 
 const AUTOSAVE_DELAY_MS = 600;
@@ -71,6 +72,20 @@ export default function IncidentBasicsPage() {
     }, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timeout);
   }, [incident]);
+
+  // Flushes on unmount, so navigating away (Continue, Back, or straight to
+  // another route) within the autosave's 600ms window does not lose the
+  // last edit, same P4.R finding 1 fix every other section already has;
+  // this page was missed when that fix went in (browser-run bug b).
+  useFlushOnUnmount(incident, (current) => {
+    if (!current) return;
+    void updateIncident(current.id, {
+      occurredAt: current.occurredAt,
+      location: current.location,
+      shortDescription: current.shortDescription,
+      conditions: current.conditions,
+    });
+  });
 
   if (incident === undefined) {
     return <p className="p-4 text-sm text-muted-foreground">Loading.</p>;

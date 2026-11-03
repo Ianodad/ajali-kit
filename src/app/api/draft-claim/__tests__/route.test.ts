@@ -22,7 +22,7 @@ function request(body: unknown, headers: Record<string, string> = {}) {
 
 function baseSummary(overrides: Partial<ClaimSummary> = {}): ClaimSummary {
   return {
-    occurredAt: "2026-11-03T14:30:00+03:00",
+    occurredAtLocal: "2026-11-03T14:30",
     locationText: "Thika Road, near the Allsops roundabout",
     weather: "clear",
     light: "day",
@@ -61,7 +61,7 @@ describe("POST /api/draft-claim", () => {
   });
 
   it("rejects a malformed request body with ok:false, before touching the model", async () => {
-    const res = await POST(request({ occurredAt: "2026-11-03" }));
+    const res = await POST(request({ occurredAtLocal: "2026-11-03" }));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.ok).toBe(false);
@@ -86,12 +86,23 @@ describe("POST /api/draft-claim", () => {
   });
 
   it("the mock account mentions the actual location, time and confirmed damage parts from the summary", async () => {
-    const summary = baseSummary({ locationText: "Ngong Road near the school", occurredAt: "2026-11-03T09:15:00+03:00" });
+    const summary = baseSummary({ locationText: "Ngong Road near the school", occurredAtLocal: "2026-11-03T09:15" });
     const res = await POST(request(summary, { "x-ajali-mock": "1" }));
     const json = await res.json();
     expect(json.data.account).toContain("Ngong Road near the school");
     expect(json.data.account).toContain("09:15");
     expect(json.data.account).toContain("rear bumper");
+  });
+
+  // Browser-run bug (a): the summary must carry local wall-clock time, not
+  // the raw UTC instant Incident.occurredAt is stored as, or the account
+  // shows a time hours off from what actually happened.
+  it("the mock account uses the local time given in the summary, not a UTC-shifted one", async () => {
+    const summary = baseSummary({ occurredAtLocal: "2026-11-03T11:38" });
+    const res = await POST(request(summary, { "x-ajali-mock": "1" }));
+    const json = await res.json();
+    expect(json.data.account).toContain("11:38");
+    expect(json.data.account).not.toContain("08:38");
   });
 
   it("the mock draft includes a consistency warning for a hit-from-behind account with front-only damage (A8)", async () => {

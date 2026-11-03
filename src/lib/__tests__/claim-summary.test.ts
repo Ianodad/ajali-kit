@@ -82,7 +82,10 @@ function buildIncident(): Incident {
     status: "draft",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    occurredAt: "2026-11-03T14:30:00+03:00",
+    // Built from local components (not a hand-written offset literal), same
+    // convention datetime.test.ts uses: toLocalInputValue's output then
+    // matches regardless of which timezone the test actually runs in.
+    occurredAt: new Date(2026, 10, 3, 14, 30).toISOString(),
     location: { text: "Thika Road, near the Allsops roundabout", lat: -1.2, lng: 36.8, accuracyM: 10 },
     conditions: { weather: "clear", light: "day", road: ["Tarmac"] },
     anyoneInjured: false,
@@ -134,6 +137,7 @@ describe("buildClaimSummary", () => {
     const incident = buildIncident();
     const summary = buildClaimSummary(incident, [ownDamagePhoto()]);
 
+    expect(summary.occurredAtLocal).toBe("2026-11-03T14:30");
     expect(summary.locationText).toBe(incident.location.text);
     expect(summary.userWords).toBe(incident.account.userWords);
     expect(summary.ownVehicleMake).toBe("Subaru");
@@ -185,6 +189,31 @@ describe("buildClaimSummary", () => {
     expect(summary.userWords).toContain("[redacted]");
     expect(summary.otherParties[0].admissionNotes).toContain("[redacted]");
     expect(summary.witnessStatements[0]).toContain("[redacted]");
+  });
+
+  // Browser-run bug (a): Incident.occurredAt is a UTC instant (new
+  // Date().toISOString()), so an incident actually created at 11:38 local
+  // time is stored with "08:38" in the raw string three hours east of UTC.
+  // occurredAtLocal must reflect local wall-clock time, not those raw digits.
+  it("converts occurredAt to local wall-clock time, not the raw UTC digits", () => {
+    const incident = buildIncident();
+    incident.occurredAt = new Date(2026, 10, 3, 11, 38).toISOString();
+
+    const summary = buildClaimSummary(incident, []);
+    expect(summary.occurredAtLocal).toBe("2026-11-03T11:38");
+  });
+
+  // Browser-run bug (b): the summary must name the typed place, not GPS
+  // coordinates, so the mock (and the real model) can mention it by name.
+  it("carries the typed location text, never the GPS coordinates", () => {
+    const incident = buildIncident();
+    incident.location = { text: "Mombasa Road near Capital Centre", lat: -1.3167, lng: 36.8333, accuracyM: 12 };
+
+    const summary = buildClaimSummary(incident, []);
+    expect(summary.locationText).toBe("Mombasa Road near Capital Centre");
+    const json = JSON.stringify(summary);
+    expect(json).not.toContain("-1.3167");
+    expect(json).not.toContain("36.8333");
   });
 });
 

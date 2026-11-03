@@ -9,14 +9,16 @@ import type { ClaimDraftWire } from "@/lib/schemas/claim-draft";
 // the real location, time and confirmed damage, not a canned example from
 // an unrelated incident.
 
-function formatDate(occurredAt: string): string {
-  const match = /^(\d{4}-\d{2}-\d{2})/.exec(occurredAt);
-  return match ? match[1] : occurredAt;
+// occurredAtLocal is already local wall-clock "YYYY-MM-DDTHH:MM" (built by
+// buildClaimSummary via lib/datetime.ts's toLocalInputValue), so a plain
+// split is correct here; slicing the raw UTC ISO string the way this used
+// to work showed the wrong hour outside UTC (browser-run bug a).
+function formatDate(occurredAtLocal: string): string {
+  return occurredAtLocal.slice(0, 10);
 }
 
-function formatTime(occurredAt: string): string | null {
-  const match = /T(\d{2}:\d{2})/.exec(occurredAt);
-  return match ? match[1] : null;
+function formatTime(occurredAtLocal: string): string {
+  return occurredAtLocal.slice(11, 16);
 }
 
 function formatList(items: string[]): string {
@@ -104,14 +106,12 @@ function buildQuestions(summary: ClaimSummary): string[] {
 }
 
 export function buildClaimDraftFixture(summary: ClaimSummary): ClaimDraftWire {
-  const date = formatDate(summary.occurredAt);
-  const time = formatTime(summary.occurredAt);
+  const date = formatDate(summary.occurredAtLocal);
+  const time = formatTime(summary.occurredAtLocal);
   const place = summary.locationText.trim() || "the location described";
   const parts = Array.from(new Set(summary.damageItems.map((item) => item.part)));
 
-  let account = time
-    ? `On ${date} at ${time}, I was involved in a motor accident near ${place}.`
-    : `On ${date}, I was involved in a motor accident near ${place}.`;
+  let account = `On ${date} at ${time}, I was involved in a motor accident near ${place}.`;
   if (summary.userWords.trim()) {
     account += ` ${summary.userWords.trim()}`;
   }

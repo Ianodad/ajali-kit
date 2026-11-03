@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { toLocalInputValue } from "@/lib/datetime";
 import { DAMAGE_TYPES, SEVERITIES } from "@/lib/schemas/damage-analysis";
 import type { DamageType, Incident, Photo, Severity } from "@/lib/types";
 
@@ -34,7 +35,12 @@ export interface ClaimSummaryOtherParty {
 }
 
 export interface ClaimSummary {
-  occurredAt: string;
+  // Local wall-clock "YYYY-MM-DDTHH:MM" (see lib/datetime.ts), not the raw
+  // ISO string: Incident.occurredAt is stored as a UTC instant (new
+  // Date().toISOString()), so slicing it directly gives the wrong hour in
+  // any zone away from UTC. This is computed in the browser, where "local"
+  // is the user's own device zone (Africa/Nairobi in practice).
+  occurredAtLocal: string;
   locationText: string;
   weather?: "clear" | "rain" | "fog";
   light?: "day" | "dusk" | "night";
@@ -90,7 +96,7 @@ export function buildClaimSummary(incident: Incident, photos: Photo[]): ClaimSum
     });
 
   return {
-    occurredAt: incident.occurredAt,
+    occurredAtLocal: toLocalInputValue(incident.occurredAt),
     locationText: incident.location.text,
     weather: incident.conditions.weather,
     light: incident.conditions.light,
@@ -144,7 +150,7 @@ export const ClaimSummaryOtherPartySchema = z.object({
 });
 
 export const ClaimSummarySchema = z.object({
-  occurredAt: z.string(),
+  occurredAtLocal: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
   locationText: z.string(),
   weather: z.enum(["clear", "rain", "fog"]).optional(),
   light: z.enum(["day", "dusk", "night"]).optional(),

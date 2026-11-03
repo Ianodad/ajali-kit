@@ -74,7 +74,14 @@ export default function PoliceSectionPage() {
   async function handleSave() {
     if (!incident || saving) return;
     setSaving(true);
-    await updatePoliceReport(incident.id, { ...incident.police, reviewed: true });
+    // Set reviewed:true in local state too, not just the direct DB write
+    // below: the flush-on-unmount that fires when router.push unmounts this
+    // page writes whatever is in local state, so leaving it unaware of the
+    // Save would silently overwrite reviewed:true back to false right after
+    // (browser-run bug c).
+    const police = { ...incident.police, reviewed: true };
+    setIncident((prev) => (prev ? { ...prev, police } : prev));
+    await updatePoliceReport(incident.id, police);
     router.push(`/incident/${incident.id}`);
   }
 
