@@ -1,0 +1,16 @@
+# Secrets and local data. Never commit these.
+.env
+.env.*
+!.env.example
+demo-assets/
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+.build-logs/
+.vercel
