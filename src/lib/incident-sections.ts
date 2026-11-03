@@ -51,11 +51,39 @@ export function getDamageReviewStatus(photos: Photo[]): SectionStatus {
   return allPhotosAnalysed && allResolved ? "done" : "in_progress";
 }
 
-// Other sections are built in later phases (other party/police/witnesses in
-// Phase 4, account/pack in Phases 5 and 6), so there is no incident data yet
+// F5: "No" or "Not sure" closes the section with no vehicle to fill in; "Yes"
+// needs at least one confirmed party ("These details are correct" ticked).
+export function getOtherPartyStatus(incident: Incident): SectionStatus {
+  if (incident.otherPartyInvolved === null) return "needed";
+  if (incident.otherPartyInvolved === "no") return "done";
+  if (incident.otherParties.length === 0) return "in_progress";
+  return incident.otherParties.every((party) => party.confirmed) ? "done" : "in_progress";
+}
+
+// F6: every field is allowed to stay empty (A7), so "done" tracks whether the
+// user has been through the section (PoliceReport.reviewed), not whether any
+// particular field is filled.
+export function getPoliceReportStatus(incident: Incident): SectionStatus {
+  if (incident.police.reviewed) return "done";
+  const touched = Boolean(incident.police.station || incident.police.obNumber || incident.police.reportedAt || incident.police.officerName);
+  return touched ? "in_progress" : "needed";
+}
+
+// F7: "No" closes the section with no witnesses to list; "Yes" needs at
+// least one witness card.
+export function getWitnessesStatus(incident: Incident): SectionStatus {
+  if (incident.witnessesPresent === null) return "needed";
+  if (incident.witnessesPresent === "no") return "done";
+  return incident.witnesses.length > 0 ? "done" : "in_progress";
+}
+
+// Account/pack are built in Phases 5 and 6, so there is no incident data yet
 // to assess their status against.
 export function getSectionStatus(slug: SectionSlug, incident: Incident, photos: Photo[]): SectionStatus {
   if (slug === "photos") return getPhotoChecklistStatus(photos);
   if (slug === "damage") return getDamageReviewStatus(photos);
+  if (slug === "other-party") return getOtherPartyStatus(incident);
+  if (slug === "police") return getPoliceReportStatus(incident);
+  if (slug === "witnesses") return getWitnessesStatus(incident);
   return "needed";
 }

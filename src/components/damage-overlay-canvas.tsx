@@ -88,9 +88,9 @@ export function DamageOverlayCanvas({
           ctx.save();
           ctx.translate(transform.translateX, transform.translateY);
           ctx.scale(transform.scaleX, transform.scaleY);
-          ctx.fillStyle = withAlpha(color, 0.35);
-          ctx.strokeStyle = withAlpha(color, 0.8);
-          ctx.lineWidth = 2 / Math.min(transform.scaleX, transform.scaleY);
+          ctx.fillStyle = withAlpha(color, 0.42);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 3 / Math.min(transform.scaleX, transform.scaleY);
           ctx.fill(path);
           ctx.stroke(path);
           ctx.restore();
@@ -127,7 +127,7 @@ export function DamageOverlayCanvas({
 }
 
 function drawNumberedPin(ctx: CanvasRenderingContext2D, x: number, y: number, number: number, color: string): void {
-  const radius = 14;
+  const radius = 22;
   ctx.save();
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -137,7 +137,7 @@ function drawNumberedPin(ctx: CanvasRenderingContext2D, x: number, y: number, nu
   ctx.strokeStyle = "white";
   ctx.stroke();
   ctx.fillStyle = "white";
-  ctx.font = "bold 14px sans-serif";
+  ctx.font = "bold 22px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(String(number), x, y + 1);

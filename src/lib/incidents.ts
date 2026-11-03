@@ -1,5 +1,5 @@
 import { db } from "./db";
-import type { Incident, OwnVehicle, Photo, StoredBlob } from "./types";
+import type { Incident, OtherParty, OwnVehicle, Photo, PoliceReport, StoredBlob, Witness } from "./types";
 
 function pad(n: number, width: number): string {
   return n.toString().padStart(width, "0");
@@ -35,8 +35,10 @@ export async function createIncident(input: CreateIncidentInput = {}): Promise<I
     conditions: {},
     anyoneInjured: input.anyoneInjured ?? null,
     ownVehicle: input.ownVehicle ?? { registration: "" },
+    otherPartyInvolved: null,
     otherParties: [],
-    police: { abstractObtained: false },
+    police: { abstractObtained: false, reviewed: false },
+    witnessesPresent: null,
     witnesses: [],
     account: { userWords: "", confirmed: false },
     aiConsent: false,
@@ -138,4 +140,68 @@ export async function deletePhoto(id: string): Promise<void> {
 
 export function getBlob(id: string): Promise<StoredBlob | undefined> {
   return db.blobs.get(id);
+}
+
+// F5: "Was another vehicle involved?" Yes / No / Not sure.
+export async function setOtherPartyInvolved(incidentId: string, value: Incident["otherPartyInvolved"]): Promise<void> {
+  await updateIncident(incidentId, { otherPartyInvolved: value });
+}
+
+export async function addOtherParty(incidentId: string): Promise<OtherParty> {
+  const incident = await getIncident(incidentId);
+  if (!incident) throw new Error("Incident not found");
+  const party: OtherParty = { id: crypto.randomUUID(), driver: {}, vehicle: {}, refusedToShare: false, confirmed: false };
+  await updateIncident(incidentId, { otherParties: [...incident.otherParties, party] });
+  return party;
+}
+
+export async function updateOtherParty(
+  incidentId: string,
+  partyId: string,
+  updater: Partial<OtherParty> | ((party: OtherParty) => OtherParty),
+): Promise<void> {
+  const incident = await getIncident(incidentId);
+  if (!incident) return;
+  const otherParties = incident.otherParties.map((party) =>
+    party.id !== partyId ? party : typeof updater === "function" ? updater(party) : { ...party, ...updater },
+  );
+  await updateIncident(incidentId, { otherParties });
+}
+
+export async function deleteOtherParty(incidentId: string, partyId: string): Promise<void> {
+  const incident = await getIncident(incidentId);
+  if (!incident) return;
+  await updateIncident(incidentId, { otherParties: incident.otherParties.filter((party) => party.id !== partyId) });
+}
+
+export async function updatePoliceReport(incidentId: string, changes: Partial<PoliceReport>): Promise<void> {
+  const incident = await getIncident(incidentId);
+  if (!incident) return;
+  await updateIncident(incidentId, { police: { ...incident.police, ...changes } });
+}
+
+// F7: "Did anyone see what happened?" Yes / No.
+export async function setWitnessesPresent(incidentId: string, value: Incident["witnessesPresent"]): Promise<void> {
+  await updateIncident(incidentId, { witnessesPresent: value });
+}
+
+export async function addWitness(incidentId: string): Promise<Witness> {
+  const incident = await getIncident(incidentId);
+  if (!incident) throw new Error("Incident not found");
+  const witness: Witness = { id: crypto.randomUUID(), name: "", consentToContact: false, statement: "" };
+  await updateIncident(incidentId, { witnesses: [...incident.witnesses, witness] });
+  return witness;
+}
+
+export async function updateWitness(incidentId: string, witnessId: string, changes: Partial<Witness>): Promise<void> {
+  const incident = await getIncident(incidentId);
+  if (!incident) return;
+  const witnesses = incident.witnesses.map((witness) => (witness.id === witnessId ? { ...witness, ...changes } : witness));
+  await updateIncident(incidentId, { witnesses });
+}
+
+export async function deleteWitness(incidentId: string, witnessId: string): Promise<void> {
+  const incident = await getIncident(incidentId);
+  if (!incident) return;
+  await updateIncident(incidentId, { witnesses: incident.witnesses.filter((witness) => witness.id !== witnessId) });
 }

@@ -28,8 +28,14 @@ export interface Incident {
   anyoneInjured: boolean | null;
   shortDescription?: string;
   ownVehicle: OwnVehicle; // snapshot copied from settings at creation
+  // Not in SPEC section 7: F5/F7's "Was another vehicle involved?" and "Did
+  // anyone see what happened?" Yes/No/Not sure answers need their own tri or
+  // bi-state so "not answered yet" (null) is distinct from "answered No",
+  // since otherParties/witnesses being empty cannot tell the two apart.
+  otherPartyInvolved: "yes" | "no" | "unsure" | null;
   otherParties: OtherParty[];
   police: PoliceReport;
+  witnessesPresent: "yes" | "no" | null;
   witnesses: Witness[];
   account: ClaimAccount;
   aiConsent: boolean;
@@ -157,6 +163,10 @@ export interface PoliceReport {
   officerName?: string;
   abstractObtained: boolean;
   abstractPhotoId?: string;
+  // Not in SPEC section 7: every field here is allowed to stay empty (A7), so
+  // there is no other signal for "the user has been through this section".
+  // Set once, from the section's "Save" action.
+  reviewed: boolean;
 }
 
 export interface Witness {

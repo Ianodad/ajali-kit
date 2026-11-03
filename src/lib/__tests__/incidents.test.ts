@@ -5,16 +5,25 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { AjaliDB, db } from "../db";
 import type { DamageAnalysis } from "../types";
 import {
+  addOtherParty,
+  addWitness,
   buildReference,
   createIncident,
   deleteIncident,
+  deleteOtherParty,
   deletePhoto,
+  deleteWitness,
   getBlob,
   getIncident,
   listIncidents,
   listPhotos,
   savePhoto,
+  setOtherPartyInvolved,
+  setWitnessesPresent,
+  updateOtherParty,
   updatePhoto,
+  updatePoliceReport,
+  updateWitness,
 } from "../incidents";
 
 beforeEach(async () => {
@@ -35,7 +44,10 @@ describe("createIncident", () => {
     const incident = await createIncident();
 
     expect(incident.status).toBe("draft");
+    expect(incident.otherPartyInvolved).toBeNull();
     expect(incident.otherParties).toEqual([]);
+    expect(incident.witnessesPresent).toBeNull();
+    expect(incident.police).toEqual({ abstractObtained: false, reviewed: false });
     expect(incident.id).toBeTruthy();
 
     const stored = await getIncident(incident.id);
@@ -219,5 +231,60 @@ describe("updatePhoto", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].analysis).toEqual(analysis);
     expect(stored[0].category).toBe("own_damage");
+  });
+});
+
+describe("other party helpers", () => {
+  it("records the Yes/No/Not sure answer", async () => {
+    const incident = await createIncident();
+    await setOtherPartyInvolved(incident.id, "unsure");
+    expect((await getIncident(incident.id))?.otherPartyInvolved).toBe("unsure");
+  });
+
+  it("adds, updates and removes a party", async () => {
+    const incident = await createIncident();
+    const party = await addOtherParty(incident.id);
+    expect((await getIncident(incident.id))?.otherParties).toHaveLength(1);
+
+    await updateOtherParty(incident.id, party.id, { confirmed: true });
+    expect((await getIncident(incident.id))?.otherParties[0].confirmed).toBe(true);
+
+    await updateOtherParty(incident.id, party.id, (p) => ({ ...p, notes: "via updater" }));
+    expect((await getIncident(incident.id))?.otherParties[0].notes).toBe("via updater");
+
+    await deleteOtherParty(incident.id, party.id);
+    expect((await getIncident(incident.id))?.otherParties).toHaveLength(0);
+  });
+});
+
+describe("updatePoliceReport", () => {
+  it("merges changes into the existing police report", async () => {
+    const incident = await createIncident();
+    await updatePoliceReport(incident.id, { station: "Central", obNumber: "" });
+    await updatePoliceReport(incident.id, { reviewed: true });
+
+    const stored = await getIncident(incident.id);
+    expect(stored?.police).toEqual({ station: "Central", obNumber: "", abstractObtained: false, reviewed: true });
+  });
+});
+
+describe("witness helpers", () => {
+  it("records the Yes/No answer", async () => {
+    const incident = await createIncident();
+    await setWitnessesPresent(incident.id, "yes");
+    expect((await getIncident(incident.id))?.witnessesPresent).toBe("yes");
+  });
+
+  it("adds, updates and removes a witness", async () => {
+    const incident = await createIncident();
+    const witness = await addWitness(incident.id);
+    expect((await getIncident(incident.id))?.witnesses).toHaveLength(1);
+
+    await updateWitness(incident.id, witness.id, { name: "Jane", consentToContact: true });
+    const updated = await getIncident(incident.id);
+    expect(updated?.witnesses[0]).toMatchObject({ name: "Jane", consentToContact: true });
+
+    await deleteWitness(incident.id, witness.id);
+    expect((await getIncident(incident.id))?.witnesses).toHaveLength(0);
   });
 });

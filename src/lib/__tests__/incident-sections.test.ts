@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { getDamageReviewStatus, getPhotoChecklistStatus, getSectionStatus } from "../incident-sections";
-import type { DamageAnalysis, DamageItem, Incident, Photo } from "../types";
+import {
+  getDamageReviewStatus,
+  getOtherPartyStatus,
+  getPhotoChecklistStatus,
+  getPoliceReportStatus,
+  getSectionStatus,
+  getWitnessesStatus,
+} from "../incident-sections";
+import type { DamageAnalysis, DamageItem, Incident, OtherParty, Photo, Witness } from "../types";
 
 function photo(category: Photo["category"], analysis?: DamageAnalysis): Photo {
   return {
@@ -120,5 +127,83 @@ describe("getDamageReviewStatus", () => {
   it("is done when a photo was analysed and found no damage at all", () => {
     const photos = [photo("own_damage", analysis([]))];
     expect(getDamageReviewStatus(photos)).toBe("done");
+  });
+});
+
+function otherParty(confirmed: boolean): OtherParty {
+  return { id: crypto.randomUUID(), driver: {}, vehicle: {}, refusedToShare: false, confirmed };
+}
+
+function withOtherParty(otherPartyInvolved: Incident["otherPartyInvolved"], otherParties: OtherParty[] = []): Incident {
+  return { ...incident, otherPartyInvolved, otherParties } as Incident;
+}
+
+describe("getOtherPartyStatus", () => {
+  it("is needed before the Yes/No/Not sure question is answered", () => {
+    expect(getOtherPartyStatus(withOtherParty(null))).toBe("needed");
+  });
+
+  it("is done when the user says No", () => {
+    expect(getOtherPartyStatus(withOtherParty("no"))).toBe("done");
+  });
+
+  it("is in_progress when Yes is picked but no party has been added yet", () => {
+    expect(getOtherPartyStatus(withOtherParty("yes"))).toBe("in_progress");
+  });
+
+  it("is in_progress when a party exists but is not confirmed", () => {
+    expect(getOtherPartyStatus(withOtherParty("yes", [otherParty(false)]))).toBe("in_progress");
+  });
+
+  it("is done once every added party is confirmed", () => {
+    expect(getOtherPartyStatus(withOtherParty("unsure", [otherParty(true), otherParty(true)]))).toBe("done");
+  });
+
+  it("is in_progress when only some of several parties are confirmed", () => {
+    expect(getOtherPartyStatus(withOtherParty("yes", [otherParty(true), otherParty(false)]))).toBe("in_progress");
+  });
+});
+
+function withPolice(police: Incident["police"]): Incident {
+  return { ...incident, police } as Incident;
+}
+
+describe("getPoliceReportStatus", () => {
+  it("is needed when nothing has been touched", () => {
+    expect(getPoliceReportStatus(withPolice({ abstractObtained: false, reviewed: false }))).toBe("needed");
+  });
+
+  it("is in_progress once a field is filled but the section has not been saved", () => {
+    expect(getPoliceReportStatus(withPolice({ station: "Central", abstractObtained: false, reviewed: false }))).toBe("in_progress");
+  });
+
+  it("is done once the section has been reviewed, even with an empty OB number (A7)", () => {
+    expect(getPoliceReportStatus(withPolice({ abstractObtained: false, reviewed: true }))).toBe("done");
+  });
+});
+
+function witness(): Witness {
+  return { id: crypto.randomUUID(), name: "Jane", consentToContact: false, statement: "Saw it" };
+}
+
+function withWitnesses(witnessesPresent: Incident["witnessesPresent"], witnesses: Witness[] = []): Incident {
+  return { ...incident, witnessesPresent, witnesses } as Incident;
+}
+
+describe("getWitnessesStatus", () => {
+  it("is needed before the Yes/No question is answered", () => {
+    expect(getWitnessesStatus(withWitnesses(null))).toBe("needed");
+  });
+
+  it("is done when the user says No", () => {
+    expect(getWitnessesStatus(withWitnesses("no"))).toBe("done");
+  });
+
+  it("is in_progress when Yes is picked but no witness has been added yet", () => {
+    expect(getWitnessesStatus(withWitnesses("yes"))).toBe("in_progress");
+  });
+
+  it("is done once at least one witness is added", () => {
+    expect(getWitnessesStatus(withWitnesses("yes", [witness()]))).toBe("done");
   });
 });
