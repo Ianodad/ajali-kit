@@ -1,16 +1,78 @@
-import { Button } from "@/components/ui/button";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { BottomActionBar } from "@/components/bottom-action-bar";
+import { StatusChip } from "@/components/status-chip";
+import { createIncident, listIncidents } from "@/lib/incidents";
+import type { Incident } from "@/lib/types";
+
+export default function HomePage() {
+  const router = useRouter();
+  const [incidents, setIncidents] = useState<Incident[] | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    listIncidents().then(setIncidents);
+  }, []);
+
+  async function handleNewIncident() {
+    setCreating(true);
+    const incident = await createIncident();
+    router.push(`/incident/${incident.id}`);
+  }
+
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
-      <div className="flex flex-col items-center gap-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Ajali Kit</h1>
-        <p className="text-muted-foreground max-w-xs text-balance">
-          Your claim pack, sorted. Scaffold is ready. The app is built in the
-          phases that follow.
-        </p>
-      </div>
-      <Button disabled>Coming soon</Button>
-    </main>
+    <div className="flex flex-1 flex-col">
+      <header className="bg-navy px-4 py-6 text-white">
+        <h1 className="text-xl font-semibold">Ajali Kit</h1>
+      </header>
+      <main className="flex-1 space-y-6 p-4 pb-24">
+        <button
+          type="button"
+          onClick={handleNewIncident}
+          disabled={creating}
+          className="w-full rounded-xl bg-emergency px-4 py-5 text-left text-white shadow disabled:opacity-60"
+        >
+          <span className="block text-lg font-semibold">I have had an accident</span>
+          <span className="block text-sm text-white/80">Start a new claim pack</span>
+        </button>
+
+        <section>
+          <h2 className="mb-2 text-sm font-medium text-muted-foreground">Your claims</h2>
+          {incidents === null ? (
+            <p className="text-sm text-muted-foreground">Loading.</p>
+          ) : incidents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No incidents yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {incidents.map((incident) => (
+                <li key={incident.id}>
+                  <Link
+                    href={`/incident/${incident.id}`}
+                    className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
+                  >
+                    <div>
+                      <p className="font-medium">{incident.reference}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {incident.location.text || "Location not set"}
+                      </p>
+                    </div>
+                    <StatusChip status={incident.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </main>
+      <BottomActionBar>
+        <Link href="/vehicle" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+          My vehicle
+        </Link>
+      </BottomActionBar>
+    </div>
   );
 }
