@@ -121,6 +121,17 @@ export function listPhotos(incidentId: string): Promise<Photo[]> {
   return db.photos.where("incidentId").equals(incidentId).toArray();
 }
 
+// Removes one photo and its blobs, for example after a "too dark, retake?"
+// quality warning. Unlike deleteIncident, this leaves the incident alone.
+export async function deletePhoto(id: string): Promise<void> {
+  await db.transaction("rw", db.photos, db.blobs, async () => {
+    const photo = await db.photos.get(id);
+    if (!photo) return;
+    await db.blobs.bulkDelete([photo.blobId, photo.thumbBlobId]);
+    await db.photos.delete(id);
+  });
+}
+
 export function getBlob(id: string): Promise<StoredBlob | undefined> {
   return db.blobs.get(id);
 }

@@ -6,10 +6,12 @@ import { useEffect, useRef, useState } from "react";
 import { BottomActionBar } from "@/components/bottom-action-bar";
 import { Button } from "@/components/ui/button";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/datetime";
-import { getCurrentPosition } from "@/lib/geolocation";
+import { getCurrentPosition, type GeoResult } from "@/lib/geolocation";
 import { getIncident, updateIncident } from "@/lib/incidents";
 import type { Incident } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const AUTOSAVE_DELAY_MS = 600;
 
 const WEATHER_LIGHT_CHIPS = [
   { label: "Clear", field: "weather" as const, value: "clear" as const },
@@ -27,6 +29,10 @@ export default function IncidentBasicsPage() {
   const [locationUnavailable, setLocationUnavailable] = useState(false);
   const [saving, setSaving] = useState(false);
   const locationAttempted = useRef(false);
+  // Continue can race a still-pending GPS fix (SPEC F2 asks for "location
+  // captured when allowed"): holding the promise here lets handleContinue
+  // await it instead of saving whatever happened to be in state yet.
+  const locationPromise = useRef<Promise<GeoResult | null> | null>(null);
 
   useEffect(() => {
     getIncident(params.id).then((found) => setIncident(found ?? null));
@@ -36,7 +42,9 @@ export default function IncidentBasicsPage() {
     if (!incident || locationAttempted.current) return;
     locationAttempted.current = true;
     if (incident.location.lat !== undefined) return;
-    getCurrentPosition().then((result) => {
+    const promise = getCurrentPosition();
+    locationPromise.current = promise;
+    promise.then((result) => {
       if (!result) {
         setLocationUnavailable(true);
         return;
@@ -45,6 +53,23 @@ export default function IncidentBasicsPage() {
         prev ? { ...prev, location: { ...prev.location, lat: result.lat, lng: result.lng, accuracyM: result.accuracyM } } : prev,
       );
     });
+  }, [incident]);
+
+  // Autosave (SPEC F2 edge state: "User leaves mid-flow: everything
+  // autosaves"), so a reload or an interrupted session keeps the edits made
+  // so far, not just whatever was in place the last time Continue was
+  // tapped.
+  useEffect(() => {
+    if (!incident) return;
+    const timeout = setTimeout(() => {
+      updateIncident(incident.id, {
+        occurredAt: incident.occurredAt,
+        location: incident.location,
+        shortDescription: incident.shortDescription,
+        conditions: incident.conditions,
+      });
+    }, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timeout);
   }, [incident]);
 
   if (incident === undefined) {
@@ -77,9 +102,14 @@ export default function IncidentBasicsPage() {
   async function handleContinue() {
     if (!incident || saving) return;
     setSaving(true);
+    let location = incident.location;
+    const pendingLocation = locationPromise.current ? await locationPromise.current : null;
+    if (pendingLocation) {
+      location = { ...location, lat: pendingLocation.lat, lng: pendingLocation.lng, accuracyM: pendingLocation.accuracyM };
+    }
     await updateIncident(incident.id, {
       occurredAt: incident.occurredAt,
-      location: incident.location,
+      location,
       shortDescription: incident.shortDescription,
       conditions: incident.conditions,
     });
@@ -103,9 +133,12 @@ export default function IncidentBasicsPage() {
             id="occurredAt"
             type="datetime-local"
             value={toLocalInputValue(incident.occurredAt)}
-            onChange={(e) =>
-              setIncident((prev) => (prev ? { ...prev, occurredAt: fromLocalInputValue(e.target.value) } : prev))
-            }
+            onChange={(e) => {
+              // An empty value (user cleared the field) is not a valid date:
+              // fromLocalInputValue would throw. Keep the last known value.
+              if (!e.target.value) return;
+              setIncident((prev) => (prev ? { ...prev, occurredAt: fromLocalInputValue(e.target.value) } : prev));
+            }}
             className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
           />
         </div>

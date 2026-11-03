@@ -7,6 +7,7 @@ import {
   buildReference,
   createIncident,
   deleteIncident,
+  deletePhoto,
   getBlob,
   getIncident,
   listIncidents,
@@ -155,5 +156,39 @@ describe("deleteIncident", () => {
 
     expect(await getIncident(keep.id)).toBeTruthy();
     expect(await listPhotos(keep.id)).toEqual([keepPhoto]);
+  });
+});
+
+describe("deletePhoto", () => {
+  it("removes one photo and its blobs, leaving the incident and other photos", async () => {
+    const incident = await createIncident();
+    const keep = await savePhoto({
+      incidentId: incident.id,
+      category: "scene",
+      blob: new Blob(["keep"]),
+      thumbBlob: new Blob(["keep-thumb"]),
+      width: 100,
+      height: 100,
+    });
+    const remove = await savePhoto({
+      incidentId: incident.id,
+      category: "own_damage",
+      blob: new Blob(["too dark"]),
+      thumbBlob: new Blob(["too dark thumb"]),
+      width: 100,
+      height: 100,
+    });
+
+    await deletePhoto(remove.id);
+
+    expect(await getIncident(incident.id)).toBeTruthy();
+    expect(await listPhotos(incident.id)).toEqual([keep]);
+    expect(await getBlob(remove.blobId)).toBeUndefined();
+    expect(await getBlob(remove.thumbBlobId)).toBeUndefined();
+    expect(await getBlob(keep.blobId)).toBeTruthy();
+  });
+
+  it("does nothing if the photo does not exist", async () => {
+    await expect(deletePhoto("missing")).resolves.toBeUndefined();
   });
 });
