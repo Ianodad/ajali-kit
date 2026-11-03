@@ -22,24 +22,41 @@ import { getOwnVehicleSettings, saveOwnVehicleSettings } from "@/lib/vehicle-set
 // incidents that already exist.
 export default function VehiclePage() {
   const [vehicle, setVehicle] = useState<OwnVehicle | undefined>(undefined);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    getOwnVehicleSettings().then((found) => setVehicle(found ?? { registration: "" }));
+    getOwnVehicleSettings()
+      .then((found) => setVehicle(found ?? { registration: "" }))
+      .catch(() => {
+        // Could not read what was saved before; still let the user fill the
+        // form in and save (it will overwrite whatever is there), rather
+        // than leaving the page stuck on "Loading." forever.
+        setLoadError(true);
+        setVehicle({ registration: "" });
+      });
   }, []);
 
   function update(changes: Partial<OwnVehicle>) {
     setSaved(false);
+    setSaveError(null);
     setVehicle((prev) => (prev ? { ...prev, ...changes } : prev));
   }
 
   async function handleSave() {
     if (!vehicle || saving) return;
     setSaving(true);
-    await saveOwnVehicleSettings(vehicle);
-    setSaving(false);
-    setSaved(true);
+    setSaveError(null);
+    try {
+      await saveOwnVehicleSettings(vehicle);
+      setSaved(true);
+    } catch {
+      setSaveError("Could not save your vehicle details on this browser.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (vehicle === undefined) {
@@ -59,6 +76,10 @@ export default function VehiclePage() {
         <p className="text-sm text-muted-foreground">
           Save your vehicle details once. New claims start with these already filled in.
         </p>
+
+        {loadError ? (
+          <p className="text-sm text-destructive">Could not load your previously saved details on this browser.</p>
+        ) : null}
 
         <div className="space-y-1">
           <label className="block text-sm font-medium" htmlFor="registration">
@@ -137,6 +158,7 @@ export default function VehiclePage() {
           />
         </div>
 
+        {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
         {saved ? <p className="text-sm text-muted-foreground">Saved.</p> : null}
       </main>
 

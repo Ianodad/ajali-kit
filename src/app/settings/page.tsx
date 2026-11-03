@@ -20,15 +20,21 @@ export default function SettingsPage() {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [creatingDemo, setCreatingDemo] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
 
   async function handleDeleteAll() {
     setDeleting(true);
-    await clearAllData();
-    setDeleting(false);
-    setConfirmDelete(false);
-    router.push("/");
+    setDeleteError(null);
+    try {
+      await clearAllData();
+      router.push("/");
+    } catch {
+      setDeleteError("Could not delete your data on this browser. Try again.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleCreateDemoIncident() {
@@ -73,6 +79,7 @@ export default function SettingsPage() {
           {confirmDelete ? (
             <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
               <p className="text-sm">Delete every incident, photo and saved setting on this device? This cannot be undone.</p>
+              {deleteError ? <p className="text-sm text-destructive">{deleteError}</p> : null}
               <div className="flex gap-2">
                 <Button type="button" variant="destructive" disabled={deleting} onClick={handleDeleteAll}>
                   Delete all data

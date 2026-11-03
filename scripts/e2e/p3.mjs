@@ -22,11 +22,16 @@ export default async function p3({ p, hub, step, out, tag }) {
     }
     await p.reload();
     await p.waitForTimeout(2500);
+    const afterReloadCount = await p.getByRole("button", { name: /Confirm|Edit/ }).count();
     console.log(
       "     after reload items:",
-      await p.getByRole("button", { name: /Confirm|Edit/ }).count(),
+      afterReloadCount,
       "| text:",
       (await p.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 300),
     );
+    // Codex review finding 3: this used to be a log line only, so a reload
+    // that silently dropped the confirmed item (persistence regression)
+    // still reported the step as OK.
+    if (afterReloadCount === 0) throw new Error("no damage item survived a reload");
   });
 }

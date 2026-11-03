@@ -24,15 +24,30 @@ const ctx = await b.newContext({
   geolocation: { latitude: -1.3, longitude: 36.82 },
   permissions: ["geolocation"],
 });
+// Codex review finding 4: relying only on the operator having started the
+// dev server with AJALI_MOCK=1 means a misconfigured target (a server with
+// a real MODEL_API_KEY and AJALI_MOCK unset) silently makes real, billed
+// Meta Model API calls during a "smoke test". Forcing mock.ts's own request
+// header on every request from this context (see src/lib/mock.ts's
+// MOCK_HEADER) guarantees every AI route stays in its mock branch
+// regardless of the server's own env var, matching the project rule that
+// e2e runs never make a real API call.
+await ctx.setExtraHTTPHeaders({ "x-ajali-mock": "1" });
 const p = await ctx.newPage();
 const errs = [];
 p.on("pageerror", (e) => errs.push(e.message));
+// Codex review finding 2: the original script only logged a failed step or a
+// page error, so a broken flow still exited 0 and a CI-style caller (this
+// npm script included) would read it as a pass. Collect every failure and
+// set process.exitCode once, after the browser closes.
+const failures = [];
 const step = async (name, fn) => {
   try {
     await fn();
     console.log("OK  ", name);
   } catch (e) {
     console.log("FAIL", name, "-", e.message.split("\n")[0]);
+    failures.push(name);
     await p.screenshot({ path: out + `e2e-${tag}-fail-${name.replace(/\W+/g, "_")}.png` });
   }
 };
@@ -87,3 +102,10 @@ if (process.env.EXTRA) {
 }
 console.log("page errors:", errs.length ? errs : "none");
 await b.close();
+
+if (failures.length || errs.length) {
+  console.log(`FAILED: ${failures.length} step(s), ${errs.length} page error(s)`);
+  process.exitCode = 1;
+} else {
+  console.log("All steps passed, no page errors.");
+}

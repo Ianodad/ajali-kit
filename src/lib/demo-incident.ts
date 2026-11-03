@@ -1,3 +1,4 @@
+import type { PixelBox } from "./box-convert";
 import {
   addOtherParty,
   addWitness,
@@ -13,6 +14,7 @@ import {
   updatePoliceReport,
   updateWitness,
 } from "./incidents";
+import { buildMockBoxMasks, buildMockVehicleMask } from "./mock/segment-mock";
 import type { DamageAnalysis, Incident } from "./types";
 
 // P7.2: one button, dev only (NEXT_PUBLIC_SHOW_DEV=1 or mock mode), that
@@ -123,11 +125,42 @@ export async function createDemoIncident(): Promise<Incident> {
     height: damagePhoto.height,
     takenAt: occurredAt,
   });
+  // Both the box and the SAM mask for each item, plus the vehicle outline,
+  // use the same mock-mask builder /api/segment's own mock branch uses
+  // (segment-mock.ts), so the demo incident shows real, geometry-consistent
+  // masks in the damage review canvas and the PDF, not just dashed box
+  // outlines (Codex review finding 5: a demo with no masks cannot show the
+  // SAM 3.1 segmentation step the pitch is built around).
+  const item1Box: PixelBox = {
+    left: Math.round(damagePhoto.width * 0.36),
+    top: Math.round(damagePhoto.height * 0.62),
+    right: Math.round(damagePhoto.width * 0.7),
+    bottom: Math.round(damagePhoto.height * 0.82),
+  };
+  const item2Box: PixelBox = {
+    left: Math.round(damagePhoto.width * 0.7),
+    top: Math.round(damagePhoto.height * 0.54),
+    right: Math.round(damagePhoto.width * 0.86),
+    bottom: Math.round(damagePhoto.height * 0.7),
+  };
+  const [itemMask1, itemMask2] = buildMockBoxMasks([
+    { id: 1, box: item1Box },
+    { id: 2, box: item2Box },
+  ]);
+  const vehicleMask = buildMockVehicleMask(damagePhoto.width, damagePhoto.height);
+
   const analysis: DamageAnalysis = {
     model: "demo-fixture",
     analysedAt: occurredAt,
     isVehiclePhoto: true,
     vehicleSide: "rear",
+    vehicleMask: {
+      svgPath: vehicleMask.svgPath,
+      boxPx: { left: 0, top: 0, right: damagePhoto.width, bottom: damagePhoto.height },
+      rasterWidth: vehicleMask.rasterWidth,
+      rasterHeight: vehicleMask.rasterHeight,
+      areaPx: vehicleMask.areaPx,
+    },
     items: [
       {
         id: crypto.randomUUID(),
@@ -137,12 +170,13 @@ export async function createDemoIncident(): Promise<Incident> {
         severity: "moderate",
         description: "A moderate dent spans the centre of the rear bumper.",
         boxNorm: [360, 620, 700, 820],
-        boxPx: {
-          left: Math.round(damagePhoto.width * 0.36),
-          top: Math.round(damagePhoto.height * 0.62),
-          right: Math.round(damagePhoto.width * 0.7),
-          bottom: Math.round(damagePhoto.height * 0.82),
-        },
+        boxPx: item1Box,
+        maskSvgPath: itemMask1.svgPath,
+        maskBoxPx: item1Box,
+        maskRasterWidth: itemMask1.rasterWidth,
+        maskRasterHeight: itemMask1.rasterHeight,
+        maskAreaPx: itemMask1.areaPx,
+        shareOfVehicle: itemMask1.areaPx / vehicleMask.areaPx,
         source: "ai",
         status: "confirmed",
       },
@@ -154,12 +188,13 @@ export async function createDemoIncident(): Promise<Incident> {
         severity: "severe",
         description: "The left rear light cluster is cracked and partly detached.",
         boxNorm: [700, 540, 860, 700],
-        boxPx: {
-          left: Math.round(damagePhoto.width * 0.7),
-          top: Math.round(damagePhoto.height * 0.54),
-          right: Math.round(damagePhoto.width * 0.86),
-          bottom: Math.round(damagePhoto.height * 0.7),
-        },
+        boxPx: item2Box,
+        maskSvgPath: itemMask2.svgPath,
+        maskBoxPx: item2Box,
+        maskRasterWidth: itemMask2.rasterWidth,
+        maskRasterHeight: itemMask2.rasterHeight,
+        maskAreaPx: itemMask2.areaPx,
+        shareOfVehicle: itemMask2.areaPx / vehicleMask.areaPx,
         source: "ai",
         status: "confirmed",
       },

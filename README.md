@@ -55,7 +55,7 @@ Requires Node 22.x (`^20.17.0` or `>=22.9.0`, for `@meta-sam/parser`).
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in MODEL_API_KEY for real AI calls, or leave AJALI_MOCK=1
+cp .env.example .env.local   # fill in MODEL_API_KEY for real AI calls, or set AJALI_MOCK=1 to skip that
 npm run dev                  # http://localhost:3000, or open the LAN address on your phone
 ```
 
@@ -127,13 +127,15 @@ flowchart LR
 ```
 
 The server holds the API key and is otherwise stateless: it never stores a photo, a document or the claim
-data. Everything the user enters lives in IndexedDB on their own phone, including the finished PDF (built
-in the browser, never uploaded).
+data. Everything the user enters lives in IndexedDB on their own phone. The finished PDF is built in the
+browser too, from that same data, and never uploaded; it is not itself kept in IndexedDB, so re-opening the
+claim pack screen rebuilds it from the incident and its photos rather than reloading a saved file.
 
 ## Privacy and security
 
-- **Local first.** Incidents, photos, documents and the PDF live in IndexedDB on the phone. "Delete all
-  data" in Settings, or deleting one incident, removes its photos and blobs from the device.
+- **Local first.** Incidents, photos and documents live in IndexedDB on the phone; the claim pack PDF is
+  built from them in the browser each time rather than stored separately. "Delete all data" in Settings, or
+  deleting one incident, removes its photos and blobs from the device.
 - **Explicit AI consent** per incident, asked once, before any photo or document is sent to the Meta Model
   API.
 - **Standard mode only.** `muse-spark-1.3` and `sam-3.1`, never a `-contributor` model, since these calls

@@ -45,7 +45,11 @@ export default async function p4({ p, hub, step, out, tag }) {
     await p.waitForTimeout(1200);
     await p.reload();
     await p.waitForTimeout(1500);
-    console.log("     after reload has witness:", (await p.locator("main input").evaluateAll((e) => e.map((x) => x.value))).includes("Test Witness"));
+    const witnessPersisted = (await p.locator("main input").evaluateAll((e) => e.map((x) => x.value))).includes("Test Witness");
+    console.log("     after reload has witness:", witnessPersisted);
+    // Codex review finding 3: this used to be a log line only, so a witness
+    // that silently did not survive a reload still reported the step as OK.
+    if (!witnessPersisted) throw new Error("witness did not survive a reload");
   });
   await step("hub status", async () => {
     await p.goto(hub);

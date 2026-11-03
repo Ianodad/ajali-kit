@@ -27,7 +27,14 @@ export default async function p6({ p, hub, step, out, tag }) {
   await step("print fallback", async () => {
     await p.goto(hub + "/pack/print");
     await p.waitForTimeout(3000);
-    console.log("     print page text:", (await p.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 200));
+    const text = (await p.locator("body").innerText()).replace(/\s+/g, " ");
+    console.log("     print page text:", text.slice(0, 200));
     await p.screenshot({ path: out + `e2e-${tag}-print.png`, fullPage: true });
+    // Codex review finding 3: this used to be a log line only, so a page
+    // that silently fell back to "Incident not found" or "not ready yet"
+    // (for example if an earlier step did not actually leave the pack
+    // ready) still reported the step as OK.
+    if (/Incident not found|not ready yet/i.test(text)) throw new Error(`print page did not render the pack: ${text.slice(0, 120)}`);
+    if (text.length < 100) throw new Error("print page content looks too short to be the real pack");
   });
 }
