@@ -1,28 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { BottomActionBar } from "@/components/bottom-action-bar";
 import { StatusChip } from "@/components/status-chip";
-import { createIncident, listIncidents } from "@/lib/incidents";
+import { listIncidents } from "@/lib/incidents";
 import type { Incident } from "@/lib/types";
 
 export default function HomePage() {
-  const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[] | null>(null);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     listIncidents().then(setIncidents);
   }, []);
-
-  async function handleNewIncident() {
-    setCreating(true);
-    const incident = await createIncident();
-    router.push(`/incident/${incident.id}`);
-  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -30,15 +21,13 @@ export default function HomePage() {
         <h1 className="text-xl font-semibold">Ajali Kit</h1>
       </header>
       <main className="flex-1 space-y-6 p-4 pb-24">
-        <button
-          type="button"
-          onClick={handleNewIncident}
-          disabled={creating}
-          className="w-full rounded-xl bg-emergency px-4 py-5 text-left text-white shadow disabled:opacity-60"
+        <Link
+          href="/safety"
+          className="block w-full rounded-xl bg-emergency px-4 py-5 text-left text-white shadow"
         >
           <span className="block text-lg font-semibold">I have had an accident</span>
           <span className="block text-sm text-white/80">Start a new claim pack</span>
-        </button>
+        </Link>
 
         <section>
           <h2 className="mb-2 text-sm font-medium text-muted-foreground">Your claims</h2>

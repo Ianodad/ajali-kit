@@ -18,6 +18,7 @@ export function buildReference(date: Date): string {
 export interface CreateIncidentInput {
   occurredAt?: string;
   ownVehicle?: OwnVehicle;
+  anyoneInjured?: boolean | null;
 }
 
 export async function createIncident(input: CreateIncidentInput = {}): Promise<Incident> {
@@ -32,7 +33,7 @@ export async function createIncident(input: CreateIncidentInput = {}): Promise<I
     occurredAt,
     location: { text: "" },
     conditions: {},
-    anyoneInjured: null,
+    anyoneInjured: input.anyoneInjured ?? null,
     ownVehicle: input.ownVehicle ?? { registration: "" },
     otherParties: [],
     police: { abstractObtained: false },

@@ -6,18 +6,20 @@ import { useEffect, useState } from "react";
 
 import { StatusChip } from "@/components/status-chip";
 import { Button } from "@/components/ui/button";
-import { INCIDENT_SECTIONS } from "@/lib/incident-sections";
-import { deleteIncident, getIncident } from "@/lib/incidents";
-import type { Incident } from "@/lib/types";
+import { INCIDENT_SECTIONS, SECTION_STATUS_LABEL, getSectionStatus } from "@/lib/incident-sections";
+import { deleteIncident, getIncident, listPhotos } from "@/lib/incidents";
+import type { Incident, Photo } from "@/lib/types";
 
 export default function IncidentHubPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [incident, setIncident] = useState<Incident | null | undefined>(undefined);
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     getIncident(params.id).then((found) => setIncident(found ?? null));
+    listPhotos(params.id).then(setPhotos);
   }, [params.id]);
 
   async function handleDelete() {
@@ -33,6 +35,9 @@ export default function IncidentHubPage() {
     return <p className="p-4 text-sm text-muted-foreground">Incident not found.</p>;
   }
 
+  const sectionStatuses = INCIDENT_SECTIONS.map((section) => getSectionStatus(section.slug, incident, photos));
+  const doneCount = sectionStatuses.filter((status) => status === "done").length;
+
   return (
     <div className="flex flex-1 flex-col">
       <header className="bg-navy px-4 py-6 text-white">
@@ -43,18 +48,22 @@ export default function IncidentHubPage() {
         </div>
       </header>
       <main className="flex-1 space-y-4 p-4 pb-24">
+        <p className="text-sm text-muted-foreground">{doneCount} of {INCIDENT_SECTIONS.length} done</p>
         <ul className="divide-y divide-border rounded-lg border border-border bg-card">
-          {INCIDENT_SECTIONS.map((section) => (
-            <li key={section.slug}>
-              <Link
-                href={`/incident/${incident.id}/${section.slug}`}
-                className="flex min-h-12 items-center justify-between gap-3 px-3 py-3"
-              >
-                <span className="font-medium">{section.title}</span>
-                <span className="text-sm text-muted-foreground">Needed ›</span>
-              </Link>
-            </li>
-          ))}
+          {INCIDENT_SECTIONS.map((section, index) => {
+            const status = sectionStatuses[index];
+            return (
+              <li key={section.slug}>
+                <Link
+                  href={`/incident/${incident.id}/${section.slug}`}
+                  className="flex min-h-12 items-center justify-between gap-3 px-3 py-3"
+                >
+                  <span className="font-medium">{section.title}</span>
+                  <span className="text-sm text-muted-foreground">{SECTION_STATUS_LABEL[status]} ›</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         {confirmDelete ? (
