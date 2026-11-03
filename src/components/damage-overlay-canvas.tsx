@@ -2,20 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { colorForItemIndex } from "@/lib/damage-colors";
+import { drawDamageOverlay, type DamageOverlayItem } from "@/lib/draw-damage-overlay";
 import { getBlob } from "@/lib/incidents";
-import { maskTransform } from "@/lib/mask-geometry";
-import type { DamageAnalysis, DamageItem } from "@/lib/types";
+import type { DamageAnalysis } from "@/lib/types";
 
 // S11 Damage review canvas: the photo with coloured semi-transparent masks
 // (one colour per item) and a thin outline of the vehicle mask (SPEC section
-// 6 and 8.3 "Client rendering"). A mask's raster is not always the same size
-// as the box it was requested on (SPEC 8.3's own note), so each mask is
-// translated AND scaled to its box via maskTransform, not just translated.
-export interface DamageOverlayItem {
-  item: DamageItem;
-  colorIndex: number;
-}
+// 6 and 8.3 "Client rendering"). The actual drawing is in
+// lib/draw-damage-overlay.ts, shared with the Phase 6 PDF flatten step.
+export type { DamageOverlayItem } from "@/lib/draw-damage-overlay";
 
 interface DamageOverlayCanvasProps {
   blobId: string;
@@ -63,51 +58,7 @@ export function DamageOverlayCanvas({
       if (!active) return;
       canvas.width = width;
       canvas.height = height;
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(image, 0, 0, width, height);
-
-      if (showVehicleOutline && vehicleMask) {
-        const transform = maskTransform(vehicleMask.boxPx, vehicleMask.rasterWidth, vehicleMask.rasterHeight);
-        ctx.save();
-        ctx.translate(transform.translateX, transform.translateY);
-        ctx.scale(transform.scaleX, transform.scaleY);
-        ctx.strokeStyle = "rgba(11, 31, 58, 0.8)"; // --navy at 80%
-        ctx.lineWidth = 2 / Math.min(transform.scaleX, transform.scaleY);
-        ctx.stroke(new Path2D(vehicleMask.svgPath));
-        ctx.restore();
-      }
-
-      for (const { item, colorIndex } of overlayItems) {
-        const color = colorForItemIndex(colorIndex);
-        const box = item.maskBoxPx ?? item.boxPx;
-        if (item.maskSvgPath) {
-          // The mask's raster is not always the same size as its box (SPEC
-          // 8.3), so scale, don't just translate.
-          const transform = maskTransform(box, item.maskRasterWidth, item.maskRasterHeight);
-          const path = new Path2D(item.maskSvgPath);
-          ctx.save();
-          ctx.translate(transform.translateX, transform.translateY);
-          ctx.scale(transform.scaleX, transform.scaleY);
-          ctx.fillStyle = withAlpha(color, 0.42);
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 3 / Math.min(transform.scaleX, transform.scaleY);
-          ctx.fill(path);
-          ctx.stroke(path);
-          ctx.restore();
-        } else {
-          // "Mask not available": the box outline only (SPEC F4 edge state).
-          ctx.save();
-          ctx.translate(box.left, box.top);
-          ctx.strokeStyle = withAlpha(color, 0.8);
-          ctx.lineWidth = 2;
-          ctx.setLineDash([6, 4]);
-          ctx.strokeRect(0, 0, box.right - box.left, box.bottom - box.top);
-          ctx.setLineDash([]);
-          ctx.restore();
-        }
-
-        drawNumberedPin(ctx, box.left, box.top, colorIndex + 1, color);
-      }
+      drawDamageOverlay(ctx, image, width, height, vehicleMask, overlayItems, showVehicleOutline);
     };
     image.src = imageUrl;
     return () => {
@@ -124,29 +75,4 @@ export function DamageOverlayCanvas({
       style={{ aspectRatio: `${width} / ${height}` }}
     />
   );
-}
-
-function drawNumberedPin(ctx: CanvasRenderingContext2D, x: number, y: number, number: number, color: string): void {
-  const radius = 22;
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "white";
-  ctx.stroke();
-  ctx.fillStyle = "white";
-  ctx.font = "bold 22px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(String(number), x, y + 1);
-  ctx.restore();
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

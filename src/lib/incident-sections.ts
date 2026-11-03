@@ -1,3 +1,4 @@
+import { canGeneratePack } from "./pack-readiness";
 import { SHOT_LIST } from "./shot-list";
 import type { Incident, Photo } from "./types";
 
@@ -86,8 +87,15 @@ export function getAccountStatus(incident: Incident): SectionStatus {
   return "needed";
 }
 
-// Pack is built in Phase 6, so there is no incident data yet to assess its
-// status against.
+// F9 step 2/5: "done" once the pack has actually been generated (the
+// Incident's own status flips to "exported" then, SPEC section 7);
+// "in_progress" once every required item is met, so Generate is reachable,
+// even before the user taps it.
+export function getPackStatus(incident: Incident, photos: Photo[]): SectionStatus {
+  if (incident.status === "exported") return "done";
+  return canGeneratePack(incident, photos) ? "in_progress" : "needed";
+}
+
 export function getSectionStatus(slug: SectionSlug, incident: Incident, photos: Photo[]): SectionStatus {
   if (slug === "photos") return getPhotoChecklistStatus(photos);
   if (slug === "damage") return getDamageReviewStatus(photos);
@@ -95,5 +103,5 @@ export function getSectionStatus(slug: SectionSlug, incident: Incident, photos: 
   if (slug === "police") return getPoliceReportStatus(incident);
   if (slug === "witnesses") return getWitnessesStatus(incident);
   if (slug === "account") return getAccountStatus(incident);
-  return "needed";
+  return getPackStatus(incident, photos);
 }

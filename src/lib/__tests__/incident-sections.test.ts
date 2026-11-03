@@ -4,6 +4,7 @@ import {
   getAccountStatus,
   getDamageReviewStatus,
   getOtherPartyStatus,
+  getPackStatus,
   getPhotoChecklistStatus,
   getPoliceReportStatus,
   getSectionStatus,
@@ -44,8 +45,17 @@ function analysis(items: DamageItem[]): DamageAnalysis {
   return { model: "mock", analysedAt: new Date().toISOString(), isVehiclePhoto: true, items };
 }
 
+// Pack readiness (Phase 6) reads location, ownVehicle and account, so the
+// shared stub carries minimal real values for those instead of leaving them
+// undefined, same as every other field here that a particular describe
+// block cares about.
 const incident = {
   id: "inc-1",
+  status: "draft",
+  occurredAt: new Date().toISOString(),
+  location: { text: "Thika Road" },
+  ownVehicle: { registration: "KDA 123A" },
+  account: { userWords: "", confirmed: false },
 } as Incident;
 
 describe("getPhotoChecklistStatus", () => {
@@ -91,13 +101,34 @@ describe("getSectionStatus", () => {
     expect(getSectionStatus("photos", incident, [photo("scene")])).toBe("in_progress");
   });
 
-  it("is needed for sections not built yet", () => {
+  it("delegates to the pack status for the pack section", () => {
     expect(getSectionStatus("pack", incident, [photo("scene")])).toBe("needed");
   });
 
   it("delegates to the damage review status for the damage section", () => {
     const photos = [photo("own_damage", analysis([damageItem("pending")]))];
     expect(getSectionStatus("damage", incident, photos)).toBe("in_progress");
+  });
+});
+
+describe("getPackStatus", () => {
+  it("is needed with no damage photo yet, even with everything else in place", () => {
+    const ready = { ...incident, account: { userWords: "x", finalText: "x", confirmed: true } } as Incident;
+    expect(getPackStatus(ready, [])).toBe("needed");
+  });
+
+  it("is needed when a damage photo exists but the account is not confirmed", () => {
+    expect(getPackStatus(incident, [photo("own_damage")])).toBe("needed");
+  });
+
+  it("is in_progress once every required item is met but the pack has not been generated", () => {
+    const ready = { ...incident, account: { userWords: "x", finalText: "x", confirmed: true } } as Incident;
+    expect(getPackStatus(ready, [photo("own_damage")])).toBe("in_progress");
+  });
+
+  it("is done once the incident status flips to exported", () => {
+    const exported = { ...incident, status: "exported", account: { userWords: "x", finalText: "x", confirmed: true } } as Incident;
+    expect(getPackStatus(exported, [photo("own_damage")])).toBe("done");
   });
 });
 
