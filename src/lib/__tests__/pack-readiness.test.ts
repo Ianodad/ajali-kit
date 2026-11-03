@@ -41,8 +41,8 @@ function damagePhoto(): Photo {
 function confirmedParty(withInsurance = true): OtherParty {
   return {
     id: crypto.randomUUID(),
-    driver: {},
-    vehicle: {},
+    driver: withInsurance ? { licenceNumber: { value: "DL-1", confidence: "high", userConfirmed: true } } : {},
+    vehicle: withInsurance ? { make: { value: "Toyota", confidence: "high", userConfirmed: true } } : {},
     insurance: withInsurance ? { insurer: { value: "Some Insurer", confidence: "high", userConfirmed: true } } : undefined,
     refusedToShare: false,
     confirmed: true,
@@ -97,20 +97,40 @@ describe("getChecklistItems", () => {
     const items = getChecklistItems(incident);
     expect(items.find((item) => item.key === "other_party_confirmed")?.met).toBe(false);
     expect(items.find((item) => item.key === "other_party_insurance")?.met).toBe(false);
+    expect(items.find((item) => item.key === "other_party_licence")?.met).toBe(false);
+    expect(items.find((item) => item.key === "other_party_logbook")?.met).toBe(false);
   });
 
-  it("marks other-party items met once every party is confirmed with insurance on file", () => {
+  it("marks other-party items met once every party is confirmed with insurance, licence and logbook on file", () => {
     const incident: Incident = { ...baseIncident(), otherPartyInvolved: "yes", otherParties: [confirmedParty(true)] };
     const items = getChecklistItems(incident);
     expect(items.find((item) => item.key === "other_party_confirmed")?.met).toBe(true);
     expect(items.find((item) => item.key === "other_party_insurance")?.met).toBe(true);
+    expect(items.find((item) => item.key === "other_party_licence")?.met).toBe(true);
+    expect(items.find((item) => item.key === "other_party_logbook")?.met).toBe(true);
   });
 
-  it("treats a refusal to share as satisfying the insurance checklist item", () => {
+  it("does not treat a refusal to share as satisfying the insurance checklist item (insurance genuinely is not on file)", () => {
     const party = { ...confirmedParty(false), refusedToShare: true };
     const incident: Incident = { ...baseIncident(), otherPartyInvolved: "yes", otherParties: [party] };
     const items = getChecklistItems(incident);
-    expect(items.find((item) => item.key === "other_party_insurance")?.met).toBe(true);
+    expect(items.find((item) => item.key === "other_party_insurance")?.met).toBe(false);
+  });
+
+  it("does not count an unconfirmed (low-confidence) extracted field as insurance, licence or logbook on file", () => {
+    const party: OtherParty = {
+      id: crypto.randomUUID(),
+      driver: { licenceNumber: { value: "DL-1", confidence: "low", userConfirmed: false } },
+      vehicle: { make: { value: "Toyota", confidence: "low", userConfirmed: false } },
+      insurance: { insurer: { value: "Some Insurer", confidence: "low", userConfirmed: false } },
+      refusedToShare: false,
+      confirmed: false,
+    };
+    const incident: Incident = { ...baseIncident(), otherPartyInvolved: "yes", otherParties: [party] };
+    const items = getChecklistItems(incident);
+    expect(items.find((item) => item.key === "other_party_insurance")?.met).toBe(false);
+    expect(items.find((item) => item.key === "other_party_licence")?.met).toBe(false);
+    expect(items.find((item) => item.key === "other_party_logbook")?.met).toBe(false);
   });
 
   it("adds a witness item only once witnessesPresent is yes", () => {

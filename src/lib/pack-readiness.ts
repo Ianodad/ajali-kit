@@ -1,4 +1,4 @@
-import type { Incident, Photo } from "./types";
+import type { ExtractedField, Incident, OtherParty, Photo } from "./types";
 
 // S17 "Claim pack" readiness (SPEC F9 step 1) and the PDF's own "Checklist of
 // documents the insurer may ask for" (F9 PDF item 11) share this one list of
@@ -16,6 +16,32 @@ export interface ReadinessItem {
 }
 
 const DAMAGE_PHOTO_CATEGORIES: Photo["category"][] = ["own_damage", "other_damage"];
+
+// A field only counts as "on file" once the user actually confirmed it (same
+// gate pack-data.ts uses for what shows in the PDF, SPEC F9 item 8), not
+// merely because Muse Spark extracted something at some confidence level.
+function isConfirmed(field: ExtractedField | undefined): boolean {
+  return Boolean(field?.userConfirmed && field.value.trim() !== "");
+}
+
+// A driver who refused to share means insurance genuinely is not on file,
+// not that the item is satisfied: refusal is tracked separately (it already
+// drives the "refused to share" note in the pack), so it must not mark
+// insurance as present when it is not (Codex review finding 1).
+function hasConfirmedInsurance(party: OtherParty): boolean {
+  return isConfirmed(party.insurance?.insurer) || isConfirmed(party.insurance?.policyOrCertificateNo);
+}
+
+function hasConfirmedLicence(party: OtherParty): boolean {
+  return isConfirmed(party.driver.licenceNumber);
+}
+
+// There is no separate "logbook photo" flag on OtherParty (SPEC section 7),
+// so a confirmed vehicle make or model is the same on-file signal
+// claim-summary.ts's logbookOnFile already uses for this party.
+function hasConfirmedLogbook(party: OtherParty): boolean {
+  return isConfirmed(party.vehicle.make) || isConfirmed(party.vehicle.model);
+}
 
 // SPEC F9 step 1: "Required for Generate: at least 1 damage photo, incident
 // date/time and location text, own vehicle registration, confirmed account."
@@ -67,9 +93,19 @@ export function getChecklistItems(incident: Incident): ReadinessItem[] {
     items.push({
       key: "other_party_insurance",
       label: "Other party's insurance on file",
-      met:
-        parties.length > 0 &&
-        parties.every((party) => party.refusedToShare || Boolean(party.insurance?.insurer?.value || party.insurance?.policyOrCertificateNo?.value)),
+      met: parties.length > 0 && parties.every(hasConfirmedInsurance),
+      fixHref: "other-party",
+    });
+    items.push({
+      key: "other_party_licence",
+      label: "Other party's licence copy on file",
+      met: parties.length > 0 && parties.every(hasConfirmedLicence),
+      fixHref: "other-party",
+    });
+    items.push({
+      key: "other_party_logbook",
+      label: "Other party's logbook copy on file",
+      met: parties.length > 0 && parties.every(hasConfirmedLogbook),
       fixHref: "other-party",
     });
   }

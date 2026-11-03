@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { formatLocalDateTime, toLocalInputValue } from "@/lib/datetime";
 import { getIncident, listPhotos } from "@/lib/incidents";
 import { buildClaimPackData } from "@/lib/pack-data";
+import { canGeneratePack } from "@/lib/pack-readiness";
 import type { Incident, Photo } from "@/lib/types";
 
 // S18b: "PDF generation fails on an old browser: fall back to a printable
@@ -32,11 +33,32 @@ export default function PackPrintPage() {
     [incident, photos],
   );
 
+  // Check for a missing incident before the generic "still loading" guard:
+  // once getIncident resolves to null, data stays null too (buildClaimPackData
+  // never ran), so testing `!data` first always hid the real "not found"
+  // state behind "Loading." forever (Codex review finding 5).
+  if (incident === null) {
+    return <p className="p-4 text-sm text-muted-foreground">Incident not found.</p>;
+  }
   if (incident === undefined || !data) {
     return <p className="p-4 text-sm text-muted-foreground">Loading.</p>;
   }
-  if (incident === null) {
-    return <p className="p-4 text-sm text-muted-foreground">Incident not found.</p>;
+
+  // This page is a straight export fallback for S18's Generate, so it must
+  // not let an incomplete incident (and, in particular, an unconfirmed
+  // account under a printed declaration) out the door just because someone
+  // navigated here directly (Codex review finding 3).
+  if (!canGeneratePack(incident, photos)) {
+    return (
+      <div className="p-4 text-sm">
+        <p className="text-muted-foreground">
+          This claim pack is not ready yet. Add the required items first.
+        </p>
+        <Link href={`/incident/${incident.id}/pack`} className="font-medium text-primary underline-offset-4 hover:underline">
+          Back to claim pack
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -115,10 +137,34 @@ export default function PackPrintPage() {
               <p className="mb-1 font-medium">
                 {photo.vehicle === "own" ? "Own vehicle" : "Other vehicle"} ({photo.photoRef})
               </p>
-              <DamageOverlayCanvas blobId={photo.blobId} width={photo.width} height={photo.height} vehicleMask={photo.vehicleMask} overlayItems={photo.items} />
+              {/* F9 item 6: the annotated photo plus the original without overlay next to it. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <DamageOverlayCanvas
+                    blobId={photo.blobId}
+                    width={photo.width}
+                    height={photo.height}
+                    vehicleMask={photo.vehicleMask}
+                    overlayItems={photo.items}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground print:text-black">Annotated</p>
+                </div>
+                <div>
+                  <PhotoImage blobId={photo.blobId} alt="Original, no overlay" className="w-full rounded-md" />
+                  <p className="mt-1 text-xs text-muted-foreground print:text-black">Original</p>
+                </div>
+              </div>
               <p className="mt-1 text-xs text-muted-foreground print:text-black">
                 Captured {formatLocalDateTime(toLocalInputValue(photo.takenAt))}
               </p>
+              {/* The numbered legend for each pin, same list the PDF prints under each photo. */}
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {photo.items.map(({ item, colorIndex }) => (
+                  <li key={item.id}>
+                    {colorIndex + 1}. {item.part}, {item.damageType.replace("_", " ")}, {item.severity}
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
         </Section>
