@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { StatusChip } from "@/components/status-chip";
 import { Button } from "@/components/ui/button";
+import { INCIDENT_SECTIONS } from "@/lib/incident-sections";
 import { deleteIncident, getIncident } from "@/lib/incidents";
 import type { Incident } from "@/lib/types";
 
@@ -41,9 +43,20 @@ export default function IncidentHubPage() {
         </div>
       </header>
       <main className="flex-1 space-y-4 p-4 pb-24">
-        <p className="text-sm text-muted-foreground">
-          Sections for this incident are built in later phases.
-        </p>
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+          {INCIDENT_SECTIONS.map((section) => (
+            <li key={section.slug}>
+              <Link
+                href={`/incident/${incident.id}/${section.slug}`}
+                className="flex min-h-12 items-center justify-between gap-3 px-3 py-3"
+              >
+                <span className="font-medium">{section.title}</span>
+                <span className="text-sm text-muted-foreground">Needed ›</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+
         {confirmDelete ? (
           <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
             <p className="text-sm">

@@ -50,7 +50,11 @@ export function getIncident(id: string): Promise<Incident | undefined> {
 
 export async function listIncidents(): Promise<Incident[]> {
   const all = await db.incidents.toArray();
-  return all.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  // Parse to a timestamp rather than comparing strings: section 7 allows any
+  // UTC offset, and two offsets can sort wrong as plain strings (for example
+  // "10:00+03:00" vs "08:00Z", where the second is later despite the smaller
+  // hour).
+  return all.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
 }
 
 export async function updateIncident(id: string, changes: Partial<Incident>): Promise<void> {
