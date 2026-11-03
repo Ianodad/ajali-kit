@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { BottomActionBar } from "@/components/bottom-action-bar";
@@ -28,6 +28,7 @@ interface QualityWarning {
 
 export default function PhotosSectionPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [incident, setIncident] = useState<Incident | null | undefined>(undefined);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [pending, setPending] = useState<PendingCapture | null>(null);
@@ -98,6 +99,8 @@ export default function PhotosSectionPage() {
   if (incident === null) {
     return <p className="p-4 text-sm text-muted-foreground">Incident not found.</p>;
   }
+
+  const pendingDamageCount = photos.filter((p) => DAMAGE_CATEGORIES.includes(p.category) && !p.analysis).length;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -225,8 +228,13 @@ export default function PhotosSectionPage() {
       ) : null}
 
       <BottomActionBar>
-        <Button type="button" className="w-full" disabled title="Built in a later phase">
-          Check damage with AI
+        <Button
+          type="button"
+          className="w-full"
+          disabled={pendingDamageCount === 0}
+          onClick={() => router.push(`/incident/${incident.id}/damage`)}
+        >
+          {pendingDamageCount > 0 ? `Check damage with AI (${pendingDamageCount} waiting)` : "Check damage with AI"}
         </Button>
       </BottomActionBar>
     </div>

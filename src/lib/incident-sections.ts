@@ -31,10 +31,31 @@ export function getPhotoChecklistStatus(photos: Photo[]): SectionStatus {
   return allRequiredMet ? "done" : "in_progress";
 }
 
-// Sections beyond Photos are built in later phases (damage AI in Phase 3,
-// other party/police/witnesses in Phase 4, account/pack in Phases 5 and 6),
-// so there is no incident data yet to assess their status against.
+const DAMAGE_PHOTO_CATEGORIES: Photo["category"][] = ["own_damage", "other_damage"];
+
+// SPEC F4 step 7: "When all items on all damage photos are confirmed or
+// deleted, 'Damage review' is ticked on the hub." "in_progress" once at
+// least one damage photo has been analysed; "needed" before that (including
+// when there are no damage photos yet to analyse).
+export function getDamageReviewStatus(photos: Photo[]): SectionStatus {
+  const damagePhotos = photos.filter((p) => DAMAGE_PHOTO_CATEGORIES.includes(p.category));
+  if (damagePhotos.length === 0) return "needed";
+
+  const analysedPhotos = damagePhotos.filter((p) => p.analysis);
+  if (analysedPhotos.length === 0) return "needed";
+
+  const allItems = analysedPhotos.flatMap((p) => p.analysis?.items ?? []);
+  const allResolved = allItems.every((item) => item.status === "confirmed" || item.status === "deleted");
+  const allPhotosAnalysed = analysedPhotos.length === damagePhotos.length;
+
+  return allPhotosAnalysed && allResolved ? "done" : "in_progress";
+}
+
+// Other sections are built in later phases (other party/police/witnesses in
+// Phase 4, account/pack in Phases 5 and 6), so there is no incident data yet
+// to assess their status against.
 export function getSectionStatus(slug: SectionSlug, incident: Incident, photos: Photo[]): SectionStatus {
   if (slug === "photos") return getPhotoChecklistStatus(photos);
+  if (slug === "damage") return getDamageReviewStatus(photos);
   return "needed";
 }

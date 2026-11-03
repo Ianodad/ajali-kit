@@ -121,6 +121,10 @@ export function listPhotos(incidentId: string): Promise<Photo[]> {
   return db.photos.where("incidentId").equals(incidentId).toArray();
 }
 
+export async function updatePhoto(id: string, changes: Partial<Photo>): Promise<void> {
+  await db.photos.update(id, changes);
+}
+
 // Removes one photo and its blobs, for example after a "too dark, retake?"
 // quality warning. Unlike deleteIncident, this leaves the incident alone.
 export async function deletePhoto(id: string): Promise<void> {

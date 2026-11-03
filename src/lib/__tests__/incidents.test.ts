@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AjaliDB, db } from "../db";
+import type { DamageAnalysis } from "../types";
 import {
   buildReference,
   createIncident,
@@ -13,6 +14,7 @@ import {
   listIncidents,
   listPhotos,
   savePhoto,
+  updatePhoto,
 } from "../incidents";
 
 beforeEach(async () => {
@@ -190,5 +192,32 @@ describe("deletePhoto", () => {
 
   it("does nothing if the photo does not exist", async () => {
     await expect(deletePhoto("missing")).resolves.toBeUndefined();
+  });
+});
+
+describe("updatePhoto", () => {
+  it("merges changes into the stored photo, leaving other fields alone", async () => {
+    const incident = await createIncident();
+    const photo = await savePhoto({
+      incidentId: incident.id,
+      category: "own_damage",
+      blob: new Blob(["photo"]),
+      thumbBlob: new Blob(["thumb"]),
+      width: 100,
+      height: 100,
+    });
+
+    const analysis: DamageAnalysis = {
+      model: "mock",
+      analysedAt: "2026-11-03T12:00:00+03:00",
+      isVehiclePhoto: true,
+      items: [],
+    };
+    await updatePhoto(photo.id, { analysis });
+
+    const stored = await listPhotos(incident.id);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].analysis).toEqual(analysis);
+    expect(stored[0].category).toBe("own_damage");
   });
 });
