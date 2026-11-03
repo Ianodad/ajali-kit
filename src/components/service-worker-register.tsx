@@ -14,6 +14,13 @@ export function ServiceWorkerRegister() {
         // Registration is best effort. The app still works without it.
       });
     };
+    // If the page has already loaded by the time this effect runs, the "load"
+    // event will never fire again, so register straight away. Otherwise wait
+    // for load to avoid competing with the first paint.
+    if (document.readyState === "complete") {
+      register();
+      return;
+    }
     window.addEventListener("load", register);
     return () => window.removeEventListener("load", register);
   }, []);
