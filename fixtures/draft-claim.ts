@@ -44,15 +44,17 @@ function groupDamageSchedule(items: ClaimSummaryDamageItem[]): ClaimDraftWire["d
 }
 
 // Demo script / A8: "a front-damage photo and a 'hit from behind' account
-// produces a consistency warning." Looks for the same kind of mismatch in
-// either direction, from the damage parts and the user's own words only
-// (never invents a contradiction that is not supported by the summary).
+// produces a consistency warning." The account is the driver's own words
+// about their own vehicle, so only the own-vehicle damage items are checked
+// against it; the other party's damage says nothing about what happened to
+// the driver's own car, in either direction (Codex review finding 6).
 function detectConsistencyWarning(summary: ClaimSummary): ClaimDraftWire["consistency_warnings"][number] | null {
   const words = summary.userWords.toLowerCase();
   const saysHitFromBehind = /(hit|rear[- ]?ended|struck).*(from )?behind/.test(words) || /rear[- ]?end(ed)?/.test(words);
   const saysHeadOn = /head[- ]?on|hit.*front|front.*collision/.test(words);
-  const hasFrontDamage = summary.damageItems.some((item) => /front/i.test(item.part));
-  const hasRearDamage = summary.damageItems.some((item) => /rear|boot|tailgate/i.test(item.part));
+  const ownDamageItems = summary.damageItems.filter((item) => item.vehicle === "own");
+  const hasFrontDamage = ownDamageItems.some((item) => /front/i.test(item.part));
+  const hasRearDamage = ownDamageItems.some((item) => /rear|boot|tailgate/i.test(item.part));
 
   if (saysHitFromBehind && hasFrontDamage && !hasRearDamage) {
     return { warning: "You said you were hit from behind, but the damage found is on the front.", section: "account" };
@@ -63,6 +65,10 @@ function detectConsistencyWarning(summary: ClaimSummary): ClaimDraftWire["consis
   return null;
 }
 
+// Codex review finding 7: an involved party with no record yet (not scanned
+// or added) is itself missing detail, not a reason to skip the check; "yes"
+// plus no party on file should surface the same gaps as "yes" plus an
+// unconfirmed party.
 function buildMissingItems(summary: ClaimSummary): ClaimDraftWire["missing_items"] {
   const items: ClaimDraftWire["missing_items"] = [];
   if (!summary.obNumberKnown) {
@@ -71,8 +77,17 @@ function buildMissingItems(summary: ClaimSummary): ClaimDraftWire["missing_items
   if (!summary.abstractObtained) {
     items.push({ item: "Police abstract", why: "Not yet obtained from the station." });
   }
-  if (summary.otherPartyInvolved === "yes" && summary.otherParties.some((party) => !party.insuranceOnFile)) {
-    items.push({ item: "Other party's insurance details", why: "Not confirmed from the other driver yet." });
+  if (summary.otherPartyInvolved === "yes") {
+    const noPartyOnFile = summary.otherParties.length === 0;
+    if (noPartyOnFile || summary.otherParties.some((party) => !party.insuranceOnFile)) {
+      items.push({ item: "Other party's insurance details", why: "Not confirmed from the other driver yet." });
+    }
+    if (noPartyOnFile || summary.otherParties.some((party) => !party.licenceOnFile)) {
+      items.push({ item: "Other driver's licence copy", why: "Not scanned yet." });
+    }
+    if (noPartyOnFile || summary.otherParties.some((party) => !party.logbookOnFile)) {
+      items.push({ item: "Other vehicle's logbook copy", why: "Not scanned yet." });
+    }
   }
   return items.slice(0, 3);
 }

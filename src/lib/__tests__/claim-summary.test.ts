@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildClaimSummary } from "../claim-summary";
+import { buildClaimSummary, redactFreeText } from "../claim-summary";
 import type { DamageAnalysis, DamageItem, Incident, OtherParty, Photo, Witness } from "../types";
 
 // SPEC 8.5 / section 11 and the Phase 5 brief: the claim-draft summary must
@@ -142,7 +142,16 @@ describe("buildClaimSummary", () => {
     ]);
     expect(summary.obNumberKnown).toBe(true);
     expect(summary.otherParties).toEqual([
-      { vehicleMake: "Toyota", vehicleColour: undefined, vehicleModel: undefined, insuranceOnFile: true, admissionNotes: "Said they were in a hurry", refusedToShare: false },
+      {
+        vehicleMake: "Toyota",
+        vehicleColour: undefined,
+        vehicleModel: undefined,
+        insuranceOnFile: true,
+        licenceOnFile: true,
+        logbookOnFile: true,
+        admissionNotes: "Said they were in a hurry",
+        refusedToShare: false,
+      },
     ]);
     expect(summary.witnessStatements).toEqual(["Saw the other car brake late"]);
   });
@@ -155,5 +164,34 @@ describe("buildClaimSummary", () => {
 
     const summary = buildClaimSummary(incident, [photo]);
     expect(summary.damageItems).toEqual([]);
+  });
+
+  // Codex review finding 1: free text (the user's own words, a party's
+  // notes, a witness statement) is not extracted field by field, so a phone
+  // number, ID number or plate typed into a sentence would otherwise reach
+  // the model unchanged.
+  it("redacts a phone number, ID number or plate typed into free text", () => {
+    const incident = buildIncident();
+    incident.account.userWords = "The other driver's number is 0712345678, their ID is 23456789 and their plate was KBZ 456C.";
+    incident.otherParties[0].notes = "Call them on 0798765432 if needed.";
+    incident.witnesses[0].statement = "I am on 0711222333, saw it from across the road.";
+
+    const summary = buildClaimSummary(incident, [ownDamagePhoto()]);
+    const json = JSON.stringify(summary);
+
+    for (const secret of ["0712345678", "23456789", "KBZ 456C", "0798765432", "0711222333"]) {
+      expect(json).not.toContain(secret);
+    }
+    expect(summary.userWords).toContain("[redacted]");
+    expect(summary.otherParties[0].admissionNotes).toContain("[redacted]");
+    expect(summary.witnessStatements[0]).toContain("[redacted]");
+  });
+});
+
+describe("redactFreeText", () => {
+  it("leaves ordinary sentences untouched", () => {
+    expect(redactFreeText("I was stopped at the lights when I was hit from behind.")).toBe(
+      "I was stopped at the lights when I was hit from behind.",
+    );
   });
 });

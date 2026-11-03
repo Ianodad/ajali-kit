@@ -37,7 +37,7 @@ function baseSummary(overrides: Partial<ClaimSummary> = {}): ClaimSummary {
       { vehicle: "own", photoRef: "photo-1", part: "rear bumper", damageType: "dent", severity: "moderate", description: "Dent on the rear bumper" },
     ],
     otherPartyInvolved: "yes",
-    otherParties: [{ vehicleMake: "Toyota", insuranceOnFile: true, refusedToShare: false }],
+    otherParties: [{ vehicleMake: "Toyota", insuranceOnFile: true, licenceOnFile: true, logbookOnFile: true, refusedToShare: false }],
     obNumberKnown: true,
     abstractObtained: false,
     witnessesPresent: "no",
@@ -118,6 +118,56 @@ describe("POST /api/draft-claim", () => {
     const res = await POST(request(summary, { "x-ajali-mock": "1" }));
     const json = await res.json();
     expect(json.data.consistencyWarnings).toHaveLength(0);
+  });
+
+  // Codex review finding 6: "hit from behind" is a statement about the
+  // driver's own vehicle, so the other vehicle's damage must not be able to
+  // trigger, or hide, a contradiction about it.
+  it("the mock draft ignores the other vehicle's damage when checking the driver's own hit-from-behind account", async () => {
+    const summary = baseSummary({
+      userWords: "I was hit from behind at the junction.",
+      damageItems: [
+        { vehicle: "own", photoRef: "photo-1", part: "rear bumper", damageType: "dent", severity: "moderate", description: "Dent on the rear bumper" },
+        { vehicle: "other", photoRef: "photo-2", part: "front bumper", damageType: "dent", severity: "moderate", description: "Dent on the front bumper" },
+      ],
+    });
+    const res = await POST(request(summary, { "x-ajali-mock": "1" }));
+    const json = await res.json();
+    expect(json.data.consistencyWarnings).toHaveLength(0);
+  });
+
+  it("the mock draft still warns on the driver's own front-only damage even with other-vehicle rear damage on file", async () => {
+    const summary = baseSummary({
+      userWords: "I was hit from behind at the junction.",
+      damageItems: [
+        { vehicle: "own", photoRef: "photo-1", part: "front bumper", damageType: "dent", severity: "moderate", description: "Dent on the front bumper" },
+        { vehicle: "other", photoRef: "photo-2", part: "rear bumper", damageType: "dent", severity: "moderate", description: "Dent on the rear bumper" },
+      ],
+    });
+    const res = await POST(request(summary, { "x-ajali-mock": "1" }));
+    const json = await res.json();
+    expect(json.data.consistencyWarnings).toHaveLength(1);
+  });
+
+  // Codex review finding 7: an involved other party with no record on file
+  // yet is itself a missing detail, not a reason to stay silent about it.
+  it("the mock draft flags missing other-party details when involved but no party record exists yet", async () => {
+    const summary = baseSummary({ otherPartyInvolved: "yes", otherParties: [] });
+    const res = await POST(request(summary, { "x-ajali-mock": "1" }));
+    const json = await res.json();
+    expect(json.data.missingItems.some((item: { item: string }) => item.item.toLowerCase().includes("insurance"))).toBe(true);
+  });
+
+  it("the mock draft flags a missing licence or logbook copy for an unscanned other party", async () => {
+    const summary = baseSummary({
+      otherPartyInvolved: "yes",
+      otherParties: [{ vehicleMake: "Toyota", insuranceOnFile: true, licenceOnFile: false, logbookOnFile: false, refusedToShare: false }],
+    });
+    const res = await POST(request(summary, { "x-ajali-mock": "1" }));
+    const json = await res.json();
+    const items = json.data.missingItems.map((item: { item: string }) => item.item.toLowerCase());
+    expect(items.some((item: string) => item.includes("licence"))).toBe(true);
+    expect(items.some((item: string) => item.includes("logbook"))).toBe(true);
   });
 
   it("parses a real structured-output response into the mapped shape", async () => {

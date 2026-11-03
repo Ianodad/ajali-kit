@@ -27,6 +27,8 @@ export interface ClaimSummaryOtherParty {
   vehicleModel?: string;
   vehicleColour?: string;
   insuranceOnFile: boolean;
+  licenceOnFile: boolean;
+  logbookOnFile: boolean;
   admissionNotes?: string;
   refusedToShare: boolean;
 }
@@ -53,6 +55,19 @@ export interface ClaimSummary {
 }
 
 const DAMAGE_PHOTO_CATEGORIES: Photo["category"][] = ["own_damage", "other_damage"];
+
+// Free text (the user's own words, a party's notes, a witness statement) is
+// not extracted field by field, so a phone number, ID number or plate typed
+// into a sentence would otherwise reach the model unchanged (Codex review
+// finding 1). These patterns catch the common Kenyan shapes; redaction, not
+// perfect detection, since free text cannot be guaranteed clean.
+const PHONE_PATTERN = /(?:\+254|0)[17]\d{8}\b/g;
+const PLATE_PATTERN = /\bK[A-Z]{2}\s?\d{3}[A-Z]\b/gi;
+const ID_NUMBER_PATTERN = /\b\d{7,8}\b/g;
+
+export function redactFreeText(text: string): string {
+  return text.replace(PHONE_PATTERN, "[redacted]").replace(PLATE_PATTERN, "[redacted]").replace(ID_NUMBER_PATTERN, "[redacted]");
+}
 
 export function buildClaimSummary(incident: Incident, photos: Photo[]): ClaimSummary {
   const damageItems: ClaimSummaryDamageItem[] = [];
@@ -81,8 +96,8 @@ export function buildClaimSummary(incident: Incident, photos: Photo[]): ClaimSum
     light: incident.conditions.light,
     road: incident.conditions.road ?? [],
     anyoneInjured: incident.anyoneInjured,
-    shortDescription: incident.shortDescription,
-    userWords: incident.account.userWords,
+    shortDescription: incident.shortDescription ? redactFreeText(incident.shortDescription) : incident.shortDescription,
+    userWords: redactFreeText(incident.account.userWords),
     ownVehicleMake: incident.ownVehicle.make,
     ownVehicleModel: incident.ownVehicle.model,
     ownVehicleColour: incident.ownVehicle.colour,
@@ -93,13 +108,18 @@ export function buildClaimSummary(incident: Incident, photos: Photo[]): ClaimSum
       vehicleModel: party.vehicle.model?.value,
       vehicleColour: party.vehicle.colour,
       insuranceOnFile: Boolean(party.insurance?.insurer?.value || party.insurance?.policyOrCertificateNo?.value),
-      admissionNotes: party.notes,
+      licenceOnFile: Boolean(party.driver.licenceNumber?.value),
+      logbookOnFile: Boolean(party.vehicle.make?.value || party.vehicle.model?.value),
+      admissionNotes: party.notes ? redactFreeText(party.notes) : party.notes,
       refusedToShare: party.refusedToShare,
     })),
     obNumberKnown: Boolean(incident.police.obNumber),
     abstractObtained: incident.police.abstractObtained,
     witnessesPresent: incident.witnessesPresent,
-    witnessStatements: incident.witnesses.map((witness) => witness.statement).filter((statement) => statement.trim() !== ""),
+    witnessStatements: incident.witnesses
+      .map((witness) => witness.statement)
+      .filter((statement) => statement.trim() !== "")
+      .map(redactFreeText),
   };
 }
 
@@ -117,6 +137,8 @@ export const ClaimSummaryOtherPartySchema = z.object({
   vehicleModel: z.string().optional(),
   vehicleColour: z.string().optional(),
   insuranceOnFile: z.boolean(),
+  licenceOnFile: z.boolean(),
+  logbookOnFile: z.boolean(),
   admissionNotes: z.string().optional(),
   refusedToShare: z.boolean(),
 });
