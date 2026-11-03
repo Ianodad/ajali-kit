@@ -4,6 +4,7 @@ import {
   applyExtractedFields,
   confirmOtherParty,
   isBlurryResult,
+  isScannableDocType,
   manualExtractedField,
   mapDocumentExtract,
 } from "@/lib/extract-document-mapping";
@@ -88,7 +89,7 @@ describe("confirmOtherParty", () => {
     expect(confirmed.driver.name?.userConfirmed).toBe(true);
   });
 
-  it("a locked field survives a later re-scan", () => {
+  it("a locked field survives a later re-scan, and confirmation survives too since nothing changed", () => {
     const party = applyExtractedFields(blankParty(), "driving_licence", [
       { key: "full_name", value: "JOHN SAMPLE", confidence: "high" },
     ]);
@@ -97,6 +98,22 @@ describe("confirmOtherParty", () => {
       { key: "full_name", value: "DIFFERENT NAME", confidence: "high" },
     ]);
     expect(rescanned.driver.name?.value).toBe("JOHN SAMPLE");
+    expect(rescanned.confirmed).toBe(true);
+  });
+
+  it("clears party-level confirmation when a later scan adds a new field, while keeping the earlier lock", () => {
+    const party = applyExtractedFields(blankParty(), "driving_licence", [
+      { key: "full_name", value: "JOHN SAMPLE", confidence: "high" },
+    ]);
+    const confirmed = confirmOtherParty(party);
+    expect(confirmed.confirmed).toBe(true);
+
+    const afterLogbookScan = applyExtractedFields(confirmed, "logbook", [
+      { key: "registration", value: "KAA 000A", confidence: "high" },
+    ]);
+    expect(afterLogbookScan.confirmed).toBe(false);
+    expect(afterLogbookScan.driver.name).toEqual({ value: "JOHN SAMPLE", confidence: "high", userConfirmed: true });
+    expect(afterLogbookScan.vehicle.registration?.value).toBe("KAA 000A");
   });
 });
 
@@ -127,5 +144,19 @@ describe("isBlurryResult", () => {
 
   it("is false when the model returned no fields at all", () => {
     expect(isBlurryResult([])).toBe(false);
+  });
+});
+
+describe("isScannableDocType", () => {
+  it("is true for the three S12 scan-button types", () => {
+    expect(isScannableDocType("driving_licence")).toBe(true);
+    expect(isScannableDocType("logbook")).toBe(true);
+    expect(isScannableDocType("insurance_certificate")).toBe(true);
+  });
+
+  it("is false for a doc type with no OtherParty mapping", () => {
+    expect(isScannableDocType("national_id")).toBe(false);
+    expect(isScannableDocType("police_abstract")).toBe(false);
+    expect(isScannableDocType("other")).toBe(false);
   });
 });

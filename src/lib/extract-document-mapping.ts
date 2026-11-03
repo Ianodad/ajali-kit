@@ -11,6 +11,17 @@ export interface ExtractDocumentData {
   fields: { key: FieldKey; value: string; confidence: ExtractedField["confidence"] }[];
 }
 
+// The three doc types the S12 scan buttons and applyExtractedFields below
+// actually know how to map onto an OtherParty. A detected type outside this
+// list (national_id, police_abstract, other) has no mapping, so a mismatch
+// against one of those cannot offer "use it as X" the way a mismatch between
+// the three scannable types can (P4.R finding 4).
+export const SCANNABLE_DOC_TYPES: readonly DocType[] = ["driving_licence", "logbook", "insurance_certificate"];
+
+export function isScannableDocType(docType: DocType): boolean {
+  return SCANNABLE_DOC_TYPES.includes(docType);
+}
+
 export function mapDocumentExtract(wire: DocumentExtractWire, model: string): ExtractDocumentData {
   return {
     model,
@@ -84,6 +95,18 @@ export function applyExtractedFields(party: OtherParty, docType: DocType, fields
     if (fieldValue(fields, "full_name")) {
       next.owner = { ...next.owner, name: pick(next.owner?.name, fields, "full_name") };
     }
+  }
+
+  // A scan that actually changed or added a field (locked fields and
+  // repeats of the same value do not count) means there is something new
+  // to review, so the party-level "These details are correct" tick must be
+  // re-done even though the individual locked fields stay locked (P4.R
+  // finding 3: confirming a licence must not let a later logbook scan add
+  // unreviewed fields while the card still reads "Confirmed").
+  const before = JSON.stringify({ driver: party.driver, vehicle: party.vehicle, owner: party.owner, insurance: party.insurance });
+  const after = JSON.stringify({ driver: next.driver, vehicle: next.vehicle, owner: next.owner, insurance: next.insurance });
+  if (before !== after) {
+    next.confirmed = false;
   }
 
   return next;

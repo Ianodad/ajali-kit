@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { processImage } from "@/lib/image";
 import { getIncident, savePhoto, updateIncident, updatePoliceReport } from "@/lib/incidents";
 import type { Incident } from "@/lib/types";
+import { useFlushOnUnmount } from "@/lib/use-flush-on-unmount";
 
 const AUTOSAVE_DELAY_MS = 600;
 
@@ -35,6 +36,14 @@ export default function PoliceSectionPage() {
     }, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timeout);
   }, [incident]);
+
+  // Flushes on unmount, so leaving via the header's Back link within the
+  // autosave's 600ms window does not lose the last edit (P4.R finding 1);
+  // Save already flushes explicitly before it navigates.
+  useFlushOnUnmount(incident, (current) => {
+    if (!current) return;
+    void updateIncident(current.id, { police: current.police });
+  });
 
   function updatePolice(changes: Partial<Incident["police"]>) {
     setIncident((prev) => (prev ? { ...prev, police: { ...prev.police, ...changes } } : prev));

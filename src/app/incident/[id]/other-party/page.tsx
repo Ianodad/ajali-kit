@@ -12,12 +12,14 @@ import {
   applyExtractedFields,
   confirmOtherParty,
   isBlurryResult,
+  isScannableDocType,
   manualExtractedField,
   type ExtractDocumentData,
 } from "@/lib/extract-document-mapping";
 import { processImage } from "@/lib/image";
 import { getIncident, savePhoto, updateIncident } from "@/lib/incidents";
 import type { DocType, ExtractedField, Incident, OtherParty } from "@/lib/types";
+import { useFlushOnUnmount } from "@/lib/use-flush-on-unmount";
 import { cn } from "@/lib/utils";
 
 const AUTOSAVE_DELAY_MS = 600;
@@ -52,6 +54,10 @@ interface MismatchState {
   requestedDocType: DocType;
   detectedDocType: DocType;
   fields: ExtractDocumentData["fields"];
+  // Whether applyExtractedFields knows how to map `detectedDocType` onto an
+  // OtherParty. False for national_id, police_abstract and other: there is
+  // nothing to "use it as", only a retake-or-type-it-yourself message.
+  supported: boolean;
 }
 
 interface BlurryState {
@@ -68,6 +74,10 @@ export default function OtherPartySectionPage() {
   const [showConsent, setShowConsent] = useState(false);
   const [mismatch, setMismatch] = useState<MismatchState | null>(null);
   const [blurryNotice, setBlurryNotice] = useState<BlurryState | null>(null);
+  // The last successfully captured blob per scan key, so a failed extraction
+  // can retry against the photo already saved, instead of asking the user
+  // to recapture it (P4.R finding 5).
+  const [lastBlobByKey, setLastBlobByKey] = useState<Record<string, Blob>>({});
 
   useEffect(() => {
     getIncident(params.id).then((found) => setIncident(found ?? null));
@@ -85,6 +95,17 @@ export default function OtherPartySectionPage() {
     }, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timeout);
   }, [incident]);
+
+  // Flushes whatever is in local state the moment this page unmounts (for
+  // example, navigating Back within the autosave's 600ms window), so those
+  // edits are not silently lost (P4.R finding 1).
+  useFlushOnUnmount(incident, (current) => {
+    if (!current) return;
+    void updateIncident(current.id, {
+      otherPartyInvolved: current.otherPartyInvolved,
+      otherParties: current.otherParties,
+    });
+  });
 
   function updateParty(partyId: string, updater: (party: OtherParty) => OtherParty) {
     setIncident((prev) => (prev ? { ...prev, otherParties: prev.otherParties.map((p) => (p.id === partyId ? updater(p) : p)) } : prev));
@@ -121,8 +142,14 @@ export default function OtherPartySectionPage() {
         setBlurryNotice({ partyId, docType });
         return;
       }
-      if (result.detectedDocType !== docType && DOC_SCAN_OPTIONS.some((option) => option.docType === result.detectedDocType)) {
-        setMismatch({ partyId, requestedDocType: docType, detectedDocType: result.detectedDocType, fields: result.fields });
+      if (result.detectedDocType !== docType) {
+        setMismatch({
+          partyId,
+          requestedDocType: docType,
+          detectedDocType: result.detectedDocType,
+          fields: result.fields,
+          supported: isScannableDocType(result.detectedDocType),
+        });
         return;
       }
       updateParty(partyId, (party) => applyExtractedFields(party, docType, result.fields));
@@ -131,6 +158,23 @@ export default function OtherPartySectionPage() {
     } finally {
       setScanningKey(null);
     }
+  }
+
+  function handleRetryScan(partyId: string, docType: DocType) {
+    const blob = lastBlobByKey[`${partyId}:${docType}`];
+    if (!blob) return;
+    void runExtraction(partyId, docType, blob);
+  }
+
+  // "Skip, I'll fill it in": the fields stay editable by hand either way, so
+  // skipping just clears the error banner rather than needing its own state.
+  function handleSkipScanError(partyId: string, docType: DocType) {
+    const key = `${partyId}:${docType}`;
+    setScanErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }
 
   async function handleDocFileSelected(partyId: string, docType: DocType, file: File | undefined) {
@@ -155,6 +199,7 @@ export default function OtherPartySectionPage() {
         lat: incident.location.lat,
         lng: incident.location.lng,
       });
+      setLastBlobByKey((prev) => ({ ...prev, [key]: processed.blob }));
       if (!incident.aiConsent) {
         setPendingScan({ partyId, docType, blob: processed.blob });
         setShowConsent(true);
@@ -250,6 +295,9 @@ export default function OtherPartySectionPage() {
                 onChange={(updater) => updateParty(party.id, updater)}
                 onRemove={() => handleRemoveParty(party.id)}
                 onScan={(docType, file) => handleDocFileSelected(party.id, docType, file)}
+                onRetry={(docType) => handleRetryScan(party.id, docType)}
+                onSkipError={(docType) => handleSkipScanError(party.id, docType)}
+                canRetry={(docType) => Boolean(lastBlobByKey[`${party.id}:${docType}`])}
               />
             ))
           : null}
@@ -261,22 +309,44 @@ export default function OtherPartySectionPage() {
         ) : null}
       </main>
 
-      {showConsent ? <AiConsentSheet onContinue={handleConsentContinue} onNotNow={handleConsentDecline} /> : null}
+      {showConsent ? (
+        <AiConsentSheet
+          message="We will send this document's photo to Meta's AI to read its details. They are not used to train Meta's models. Continue?"
+          onContinue={handleConsentContinue}
+          onNotNow={handleConsentDecline}
+        />
+      ) : null}
 
       {mismatch ? (
         <div className="fixed inset-0 z-30 flex items-end bg-black/50" role="dialog" aria-modal>
           <div className="w-full rounded-t-2xl bg-background p-5 pb-8">
-            <p className="text-sm">
-              This looks like a {DOC_TYPE_LABEL[mismatch.detectedDocType]}. Use it as a {DOC_TYPE_LABEL[mismatch.detectedDocType]}?
-            </p>
-            <div className="mt-4 flex gap-3">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setMismatch(null)}>
-                No, try again
-              </Button>
-              <Button type="button" className="flex-1" onClick={handleMismatchUseDetected}>
-                Yes, use it
-              </Button>
-            </div>
+            {mismatch.supported ? (
+              <>
+                <p className="text-sm">
+                  This looks like a {DOC_TYPE_LABEL[mismatch.detectedDocType]}. Use it as a {DOC_TYPE_LABEL[mismatch.detectedDocType]}?
+                </p>
+                <div className="mt-4 flex gap-3">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setMismatch(null)}>
+                    No, try again
+                  </Button>
+                  <Button type="button" className="flex-1" onClick={handleMismatchUseDetected}>
+                    Yes, use it
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">
+                  This does not look like a {DOC_TYPE_LABEL[mismatch.requestedDocType]}. Retake it in good light, or fill in the details
+                  yourself.
+                </p>
+                <div className="mt-4 flex gap-3">
+                  <Button type="button" className="flex-1" onClick={() => setMismatch(null)}>
+                    OK
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}
@@ -295,6 +365,9 @@ interface OtherPartyCardProps {
   onChange: (updater: (party: OtherParty) => OtherParty) => void;
   onRemove: () => void;
   onScan: (docType: DocType, file: File | undefined) => void;
+  onRetry: (docType: DocType) => void;
+  onSkipError: (docType: DocType) => void;
+  canRetry: (docType: DocType) => boolean;
 }
 
 function OtherPartyCard({
@@ -308,6 +381,9 @@ function OtherPartyCard({
   onChange,
   onRemove,
   onScan,
+  onRetry,
+  onSkipError,
+  canRetry,
 }: OtherPartyCardProps) {
   // Owned here, not passed in from the parent: a ref map mutated by a
   // component other than the one that created it is unsafe under the React
@@ -374,7 +450,29 @@ function OtherPartyCard({
                       e.target.value = "";
                     }}
                   />
-                  {scanErrors[scanKey] ? <p className="max-w-32 text-xs text-destructive">{scanErrors[scanKey]}</p> : null}
+                  {scanErrors[scanKey] ? (
+                    <div className="max-w-32 space-y-1">
+                      <p className="text-xs text-destructive">{scanErrors[scanKey]}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {canRetry(option.docType) ? (
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                            onClick={() => onRetry(option.docType)}
+                          >
+                            Try again
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                          onClick={() => onSkipError(option.docType)}
+                        >
+                          Skip, I&apos;ll fill it in
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

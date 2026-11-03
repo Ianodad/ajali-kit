@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getIncident, updateIncident } from "@/lib/incidents";
 import type { Incident, Witness } from "@/lib/types";
+import { useFlushOnUnmount } from "@/lib/use-flush-on-unmount";
 import { cn } from "@/lib/utils";
 
 const AUTOSAVE_DELAY_MS = 600;
@@ -31,6 +32,13 @@ export default function WitnessesSectionPage() {
     }, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timeout);
   }, [incident]);
+
+  // Flushes on unmount, so navigating away within the autosave's 600ms
+  // window does not lose the last edit (P4.R finding 1).
+  useFlushOnUnmount(incident, (current) => {
+    if (!current) return;
+    void updateIncident(current.id, { witnessesPresent: current.witnessesPresent, witnesses: current.witnesses });
+  });
 
   function handlePresentChange(value: Incident["witnessesPresent"]) {
     setIncident((prev) => {
