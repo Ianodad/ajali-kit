@@ -38,7 +38,9 @@ export default function DamageSectionPage() {
   const [editing, setEditing] = useState<{ photoId: string; itemId: string } | null>(null);
 
   useEffect(() => {
-    getIncident(params.id).then((found) => setIncident(found ?? null));
+    getIncident(params.id)
+      .then((found) => setIncident(found ?? null))
+      .catch(() => setIncident(null));
     listPhotos(params.id).then(setPhotos);
   }, [params.id]);
 

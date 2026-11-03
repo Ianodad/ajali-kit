@@ -80,7 +80,9 @@ export default function OtherPartySectionPage() {
   const [lastBlobByKey, setLastBlobByKey] = useState<Record<string, Blob>>({});
 
   useEffect(() => {
-    getIncident(params.id).then((found) => setIncident(found ?? null));
+    getIncident(params.id)
+      .then((found) => setIncident(found ?? null))
+      .catch(() => setIncident(null));
   }, [params.id]);
 
   // Autosave, same pattern as the Incident basics page: everything typed or

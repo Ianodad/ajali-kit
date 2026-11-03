@@ -39,7 +39,9 @@ export default function PhotosSectionPage() {
   const galleryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
-    getIncident(params.id).then((found) => setIncident(found ?? null));
+    getIncident(params.id)
+      .then((found) => setIncident(found ?? null))
+      .catch(() => setIncident(null));
     listPhotos(params.id).then(setPhotos);
   }, [params.id]);
 

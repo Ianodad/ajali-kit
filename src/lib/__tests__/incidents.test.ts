@@ -8,6 +8,7 @@ import {
   addOtherParty,
   addWitness,
   buildReference,
+  clearAllData,
   createIncident,
   deleteIncident,
   deleteOtherParty,
@@ -30,6 +31,7 @@ beforeEach(async () => {
   await db.incidents.clear();
   await db.photos.clear();
   await db.blobs.clear();
+  await db.settings.clear();
 });
 
 describe("buildReference", () => {
@@ -286,5 +288,27 @@ describe("witness helpers", () => {
 
     await deleteWitness(incident.id, witness.id);
     expect((await getIncident(incident.id))?.witnesses).toHaveLength(0);
+  });
+});
+
+describe("clearAllData", () => {
+  it("wipes every incident, photo, blob and saved setting", async () => {
+    const incident = await createIncident();
+    await savePhoto({
+      incidentId: incident.id,
+      category: "scene",
+      blob: new Blob(["a"]),
+      thumbBlob: new Blob(["b"]),
+      width: 10,
+      height: 10,
+    });
+    await db.settings.put({ id: "own-vehicle", value: { registration: "KDA 123A" } });
+
+    await clearAllData();
+
+    expect(await listIncidents()).toEqual([]);
+    expect(await listPhotos(incident.id)).toEqual([]);
+    expect(await db.blobs.count()).toBe(0);
+    expect(await db.settings.count()).toBe(0);
   });
 });

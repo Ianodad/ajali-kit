@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen-icons": "node scripts/gen-icons.mjs"
+    "gen-icons": "node scripts/gen-icons.mjs",
+    "e2e:smoke": "EXTRA=./all.mjs MORE=./p6.mjs node scripts/e2e/flow.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -39,6 +40,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
     "fake-indexeddb": "^6.2.7",
+    "playwright-core": "^1.64.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.1.0"

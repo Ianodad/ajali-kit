@@ -36,7 +36,9 @@ export default function IncidentBasicsPage() {
   const locationPromise = useRef<Promise<GeoResult | null> | null>(null);
 
   useEffect(() => {
-    getIncident(params.id).then((found) => setIncident(found ?? null));
+    getIncident(params.id)
+      .then((found) => setIncident(found ?? null))
+      .catch(() => setIncident(null));
   }, [params.id]);
 
   useEffect(() => {

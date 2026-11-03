@@ -7,6 +7,7 @@ import { BottomActionBar } from "@/components/bottom-action-bar";
 import { Button } from "@/components/ui/button";
 import { createIncident } from "@/lib/incidents";
 import { cn } from "@/lib/utils";
+import { getOwnVehicleSettings } from "@/lib/vehicle-settings";
 
 // S05 Safety check, SPEC section 5 (F2) and section 6. The incident is
 // created only once the user continues from here, not on Home: section 5
@@ -19,7 +20,11 @@ export default function SafetyCheckPage() {
   async function handleContinue() {
     if (creating || hurt === null) return;
     setCreating(true);
-    const incident = await createIncident({ anyoneInjured: hurt });
+    // S03 "My vehicle" (if saved) seeds the new incident's OwnVehicle snapshot,
+    // so the pack screen's inline registration fix is no longer the only way
+    // to get it filled in.
+    const ownVehicle = await getOwnVehicleSettings();
+    const incident = await createIncident({ anyoneInjured: hurt, ownVehicle });
     router.push(`/incident/${incident.id}/basics`);
   }
 

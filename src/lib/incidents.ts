@@ -211,3 +211,15 @@ export async function updateClaimAccount(incidentId: string, changes: Partial<Cl
   if (!incident) return;
   await updateIncident(incidentId, { account: { ...incident.account, ...changes } });
 }
+
+// Settings "Delete all data" (SPEC section 11): every incident, photo, blob
+// and saved setting (the "My vehicle" default) leaves the device. Nothing
+// short of this full wipe is "clear all data".
+export async function clearAllData(): Promise<void> {
+  await db.transaction("rw", db.incidents, db.photos, db.blobs, db.settings, async () => {
+    await db.photos.clear();
+    await db.blobs.clear();
+    await db.incidents.clear();
+    await db.settings.clear();
+  });
+}

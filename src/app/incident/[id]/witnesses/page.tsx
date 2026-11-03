@@ -21,7 +21,9 @@ export default function WitnessesSectionPage() {
   const [incident, setIncident] = useState<Incident | null | undefined>(undefined);
 
   useEffect(() => {
-    getIncident(params.id).then((found) => setIncident(found ?? null));
+    getIncident(params.id)
+      .then((found) => setIncident(found ?? null))
+      .catch(() => setIncident(null));
   }, [params.id]);
 
   // Autosave, same pattern as Incident basics.

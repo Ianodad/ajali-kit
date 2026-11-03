@@ -23,7 +23,9 @@ export default function PoliceSectionPage() {
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    getIncident(params.id).then((found) => setIncident(found ?? null));
+    getIncident(params.id)
+      .then((found) => setIncident(found ?? null))
+      .catch(() => setIncident(null));
   }, [params.id]);
 
   // Autosave, same pattern as Incident basics: typed fields persist on their

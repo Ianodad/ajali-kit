@@ -9,6 +9,7 @@ out/
 coverage/
 playwright-report/
 test-results/
+e2e-output/
 *.tsbuildinfo
 next-env.d.ts
 AGENTS.md

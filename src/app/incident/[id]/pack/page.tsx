@@ -49,11 +49,15 @@ export default function PackSectionPage() {
   }, [incident]);
 
   useEffect(() => {
-    getIncident(params.id).then((found) => {
-      setIncident(found ?? null);
-      if (found) setRegistrationDraft(found.ownVehicle.registration);
-    });
-    listPhotos(params.id).then(setPhotos);
+    getIncident(params.id)
+      .then((found) => {
+        setIncident(found ?? null);
+        if (found) setRegistrationDraft(found.ownVehicle.registration);
+      })
+      .catch(() => setIncident(null));
+    listPhotos(params.id)
+      .then(setPhotos)
+      .catch(() => setPhotos([]));
   }, [params.id]);
 
   // Same object-URL-with-cleanup pattern as PhotoThumb/DamageOverlayCanvas:
