@@ -4,15 +4,14 @@ import { useEffect, useRef, useState } from "react";
 
 import { colorForItemIndex } from "@/lib/damage-colors";
 import { getBlob } from "@/lib/incidents";
+import { maskTransform } from "@/lib/mask-geometry";
 import type { DamageAnalysis, DamageItem } from "@/lib/types";
 
 // S11 Damage review canvas: the photo with coloured semi-transparent masks
 // (one colour per item) and a thin outline of the vehicle mask (SPEC section
-// 6 and 8.3 "Client rendering"). The data model (section 7) has no stored
-// mask raster size, only the box the mask was requested on, so this assumes
-// a mask's raster is the same size as its own box (the cookbook default
-// SPEC 8.3 notes) and draws its path directly at the box origin, with no
-// extra scale.
+// 6 and 8.3 "Client rendering"). A mask's raster is not always the same size
+// as the box it was requested on (SPEC 8.3's own note), so each mask is
+// translated AND scaled to its box via maskTransform, not just translated.
 export interface DamageOverlayItem {
   item: DamageItem;
   colorIndex: number;
@@ -68,10 +67,12 @@ export function DamageOverlayCanvas({
       ctx.drawImage(image, 0, 0, width, height);
 
       if (showVehicleOutline && vehicleMask) {
+        const transform = maskTransform(vehicleMask.boxPx, vehicleMask.rasterWidth, vehicleMask.rasterHeight);
         ctx.save();
-        ctx.translate(vehicleMask.boxPx.left, vehicleMask.boxPx.top);
+        ctx.translate(transform.translateX, transform.translateY);
+        ctx.scale(transform.scaleX, transform.scaleY);
         ctx.strokeStyle = "rgba(11, 31, 58, 0.8)"; // --navy at 80%
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 / Math.min(transform.scaleX, transform.scaleY);
         ctx.stroke(new Path2D(vehicleMask.svgPath));
         ctx.restore();
       }
@@ -79,24 +80,31 @@ export function DamageOverlayCanvas({
       for (const { item, colorIndex } of overlayItems) {
         const color = colorForItemIndex(colorIndex);
         const box = item.maskBoxPx ?? item.boxPx;
-        ctx.save();
-        ctx.translate(box.left, box.top);
         if (item.maskSvgPath) {
+          // The mask's raster is not always the same size as its box (SPEC
+          // 8.3), so scale, don't just translate.
+          const transform = maskTransform(box, item.maskRasterWidth, item.maskRasterHeight);
           const path = new Path2D(item.maskSvgPath);
+          ctx.save();
+          ctx.translate(transform.translateX, transform.translateY);
+          ctx.scale(transform.scaleX, transform.scaleY);
           ctx.fillStyle = withAlpha(color, 0.35);
           ctx.strokeStyle = withAlpha(color, 0.8);
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2 / Math.min(transform.scaleX, transform.scaleY);
           ctx.fill(path);
           ctx.stroke(path);
+          ctx.restore();
         } else {
           // "Mask not available": the box outline only (SPEC F4 edge state).
+          ctx.save();
+          ctx.translate(box.left, box.top);
           ctx.strokeStyle = withAlpha(color, 0.8);
           ctx.lineWidth = 2;
           ctx.setLineDash([6, 4]);
           ctx.strokeRect(0, 0, box.right - box.left, box.bottom - box.top);
           ctx.setLineDash([]);
+          ctx.restore();
         }
-        ctx.restore();
 
         drawNumberedPin(ctx, box.left, box.top, colorIndex + 1, color);
       }

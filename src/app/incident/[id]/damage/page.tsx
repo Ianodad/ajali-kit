@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AiConsentSheet } from "@/components/ai-consent-sheet";
+import { BottomActionBar } from "@/components/bottom-action-bar";
 import { DamageOverlayCanvas } from "@/components/damage-overlay-canvas";
 import { Button } from "@/components/ui/button";
 import { colorForItemIndex } from "@/lib/damage-colors";
@@ -32,8 +33,8 @@ export default function DamageSectionPage() {
   const [progressById, setProgressById] = useState<Record<string, Progress>>({});
   const [failedById, setFailedById] = useState<Record<string, string>>({});
   const [attemptsById, setAttemptsById] = useState<Record<string, number>>({});
-  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
   const [showConsent, setShowConsent] = useState(false);
+  const [consentDeclined, setConsentDeclined] = useState(false);
   const [editing, setEditing] = useState<{ photoId: string; itemId: string } | null>(null);
 
   useEffect(() => {
@@ -42,13 +43,17 @@ export default function DamageSectionPage() {
   }, [params.id]);
 
   const damagePhotos = photos.filter((p) => DAMAGE_CATEGORIES.includes(p.category));
-  const pendingPhotos = damagePhotos.filter(
-    (p) => !p.analysis && !runningIds.has(p.id) && !failedById[p.id] && !skippedIds.has(p.id),
-  );
+  // A photo with a "skipped" analysis has analysis set, so it is correctly
+  // excluded here without separate in-memory bookkeeping; it is also
+  // reload-safe, since the skip is persisted (updatePhoto), not session state.
+  const pendingPhotos = damagePhotos.filter((p) => !p.analysis && !runningIds.has(p.id) && !failedById[p.id]);
 
   // SPEC F4 step 1: show the consent sheet once per incident, then run.
+  // Only auto-triggers the first time; after "Not now", the explicit "Check
+  // damage with AI" button below is the way back in (it reopens consent),
+  // since this effect's dependencies would otherwise never change again.
   useEffect(() => {
-    if (!incident || damagePhotos.length === 0) return;
+    if (!incident || damagePhotos.length === 0 || consentDeclined) return;
     if (pendingPhotos.length === 0) return;
     if (!incident.aiConsent) {
       setShowConsent(true);
@@ -56,13 +61,26 @@ export default function DamageSectionPage() {
     }
     void runPipelineFor(pendingPhotos);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per newly-discovered pending photo set, not on every render.
-  }, [incident?.aiConsent, damagePhotos.length]);
+  }, [incident?.aiConsent, damagePhotos.length, consentDeclined]);
 
   async function handleConsentContinue() {
     if (!incident) return;
     await updateIncident(incident.id, { aiConsent: true });
-    setIncident({ ...incident, aiConsent: true });
     setShowConsent(false);
+    setConsentDeclined(false);
+    // Flips incident.aiConsent last: the auto-run effect above watches it and
+    // starts the pipeline for pendingPhotos itself, so this does not also
+    // call runPipelineFor directly (that would run it twice).
+    setIncident({ ...incident, aiConsent: true });
+  }
+
+  function handleCheckDamageWithAi() {
+    if (!incident) return;
+    if (!incident.aiConsent) {
+      setShowConsent(true);
+      return;
+    }
+    void runPipelineFor(pendingPhotos);
   }
 
   async function runPipelineFor(photosToRun: Photo[]) {
@@ -120,6 +138,29 @@ export default function DamageSectionPage() {
     void persistAnalysis(photo.id, { ...photo.analysis, items });
   }
 
+  // Persists the skip, rather than only remembering it in React state: a
+  // skipped photo must stay skipped (not auto-retried) across a reload, and
+  // must stop showing the failed card it was skipped from.
+  function handleSkip(photo: Photo) {
+    setFailedById((prev) => {
+      const next = { ...prev };
+      delete next[photo.id];
+      return next;
+    });
+    setAttemptsById((prev) => {
+      const next = { ...prev };
+      delete next[photo.id];
+      return next;
+    });
+    void persistAnalysis(photo.id, {
+      model: "skipped",
+      analysedAt: new Date().toISOString(),
+      isVehiclePhoto: true,
+      items: [],
+      skipped: true,
+    });
+  }
+
   if (incident === undefined) {
     return <p className="p-4 text-sm text-muted-foreground">Loading.</p>;
   }
@@ -136,7 +177,7 @@ export default function DamageSectionPage() {
         <h1 className="mt-1 text-lg font-semibold">Damage review</h1>
       </header>
 
-      <main className="flex-1 space-y-4 p-4 pb-10">
+      <main className="flex-1 space-y-4 p-4 pb-24">
         {damagePhotos.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No damage photos yet.{" "}
@@ -158,7 +199,7 @@ export default function DamageSectionPage() {
                 failedMessage={failedById[photo.id]}
                 attempts={attemptsById[photo.id] ?? 0}
                 onRetry={() => runPipelineFor([photo])}
-                onSkip={() => setSkippedIds((prev) => new Set([...prev, photo.id]))}
+                onSkip={() => handleSkip(photo)}
                 editing={editing}
                 onEditStart={(itemId) => setEditing({ photoId: photo.id, itemId })}
                 onEditCancel={() => setEditing(null)}
@@ -174,7 +215,23 @@ export default function DamageSectionPage() {
         )}
       </main>
 
-      {showConsent ? <AiConsentSheet onContinue={handleConsentContinue} onNotNow={() => setShowConsent(false)} /> : null}
+      {pendingPhotos.length > 0 ? (
+        <BottomActionBar>
+          <Button type="button" className="w-full" onClick={handleCheckDamageWithAi}>
+            Check damage with AI ({pendingPhotos.length} waiting)
+          </Button>
+        </BottomActionBar>
+      ) : null}
+
+      {showConsent ? (
+        <AiConsentSheet
+          onContinue={handleConsentContinue}
+          onNotNow={() => {
+            setShowConsent(false);
+            setConsentDeclined(true);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -239,6 +296,17 @@ function DamagePhotoCard({
   const { analysis } = photo;
   if (!analysis) {
     return <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">Waiting.</div>;
+  }
+
+  if (analysis.skipped) {
+    return (
+      <div className="space-y-2 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+        <p>AI check skipped for this photo.</p>
+        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    );
   }
 
   if (!analysis.isVehiclePhoto) {

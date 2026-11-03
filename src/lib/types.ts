@@ -91,6 +91,8 @@ export interface DamageItem {
   boxPx: { left: number; top: number; right: number; bottom: number };
   maskSvgPath?: string; // from decodeMaskToSVGPath, in mask raster coords
   maskBoxPx?: { left: number; top: number; right: number; bottom: number }; // SAM box
+  maskRasterWidth?: number; // the mask's own raster size: not always equal to maskBoxPx's size (SPEC 8.3)
+  maskRasterHeight?: number;
   maskAreaPx?: number;
   shareOfVehicle?: number; // 0..1
   source: "ai" | "user";
@@ -113,9 +115,16 @@ export interface DamageAnalysis {
     | "top"
     | "unknown";
   qualityNote?: string;
-  vehicleMask?: { svgPath: string; boxPx: { left: number; top: number; right: number; bottom: number }; areaPx: number };
+  vehicleMask?: {
+    svgPath: string;
+    boxPx: { left: number; top: number; right: number; bottom: number };
+    rasterWidth?: number; // the mask's own raster size: not always equal to boxPx's size (SPEC 8.3)
+    rasterHeight?: number;
+    areaPx: number;
+  };
   items: DamageItem[];
   errors?: string[];
+  skipped?: boolean; // the user chose "Skip AI for this photo" after repeated failures
 }
 
 export interface ExtractedField {

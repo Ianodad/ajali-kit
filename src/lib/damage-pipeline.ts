@@ -136,7 +136,13 @@ export async function analyzeDamagePhoto(
 
   const vehicleMaskObject = pickVehicleMask(vehicleResult.objects, damageBoxes);
   const vehicleMask = vehicleMaskObject
-    ? { svgPath: vehicleMaskObject.svgPath, boxPx: vehicleMaskObject.box, areaPx: vehicleMaskObject.areaPx }
+    ? {
+        svgPath: vehicleMaskObject.svgPath,
+        boxPx: vehicleMaskObject.box,
+        rasterWidth: vehicleMaskObject.rasterWidth,
+        rasterHeight: vehicleMaskObject.rasterHeight,
+        areaPx: vehicleMaskObject.areaPx,
+      }
     : undefined;
 
   const maskByObjectId = new Map(boxesData.objects.map((object) => [object.objectId, object]));
@@ -157,6 +163,8 @@ export async function analyzeDamagePhoto(
       boxPx: item.boxPx,
       maskSvgPath: mask?.svgPath,
       maskBoxPx: mask?.box,
+      maskRasterWidth: mask?.rasterWidth,
+      maskRasterHeight: mask?.rasterHeight,
       maskAreaPx: mask?.areaPx,
       shareOfVehicle: mask && vehicleMask && vehicleMask.areaPx > 0 ? mask.areaPx / vehicleMask.areaPx : undefined,
       source: "ai",

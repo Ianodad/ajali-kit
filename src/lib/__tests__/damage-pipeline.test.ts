@@ -73,7 +73,10 @@ describe("analyzeDamagePhoto", () => {
     const vehicleData = { objects: [{ objectId: "vehicle", box: { left: 0, top: 0, right: 1200, bottom: 1600 }, svgPath: "M0,0Z", rasterWidth: 1200, rasterHeight: 1600, areaPx: 1000000 }] };
     const boxesData = {
       objects: [
-        { objectId: "1", box: { left: 0, top: 0, right: 100, bottom: 100 }, svgPath: "M1Z", rasterWidth: 100, rasterHeight: 100, areaPx: 5000 },
+        // A raster smaller than its own box: the real API does not promise
+        // they match (SPEC 8.3). The pipeline must carry both sizes through
+        // so the canvas can scale, not just translate.
+        { objectId: "1", box: { left: 0, top: 0, right: 100, bottom: 100 }, svgPath: "M1Z", rasterWidth: 50, rasterHeight: 25, areaPx: 5000 },
         { objectId: "2", box: { left: 200, top: 200, right: 300, bottom: 300 }, svgPath: "M2Z", rasterWidth: 100, rasterHeight: 100, areaPx: 3000 },
       ],
     };
@@ -92,6 +95,10 @@ describe("analyzeDamagePhoto", () => {
     expect(analysis.items).toHaveLength(2);
     expect(analysis.vehicleMask?.areaPx).toBe(1000000);
     expect(analysis.items[0].maskSvgPath).toBe("M1Z");
+    expect(analysis.items[0].maskRasterWidth).toBe(50);
+    expect(analysis.items[0].maskRasterHeight).toBe(25);
+    expect(analysis.vehicleMask?.rasterWidth).toBe(1200);
+    expect(analysis.vehicleMask?.rasterHeight).toBe(1600);
     expect(analysis.items[0].shareOfVehicle).toBeCloseTo(5000 / 1000000);
     expect(analysis.items[1].samObjectId).toBe(2);
     expect(analysis.items.every((item) => item.status === "pending" && item.source === "ai")).toBe(true);
