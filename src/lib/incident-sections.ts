@@ -77,13 +77,23 @@ export function getWitnessesStatus(incident: Incident): SectionStatus {
   return incident.witnesses.length > 0 ? "done" : "in_progress";
 }
 
-// Account/pack are built in Phases 5 and 6, so there is no incident data yet
-// to assess their status against.
+// F8: "needed" until there is at least a draft to work with, "in_progress"
+// once the user has written something or drafted with AI but not yet ticked
+// the declaration, "done" once the account is confirmed (SPEC 5 F8 step 5).
+export function getAccountStatus(incident: Incident): SectionStatus {
+  if (incident.account.confirmed) return "done";
+  if (incident.account.userWords.trim() !== "" || incident.account.draft) return "in_progress";
+  return "needed";
+}
+
+// Pack is built in Phase 6, so there is no incident data yet to assess its
+// status against.
 export function getSectionStatus(slug: SectionSlug, incident: Incident, photos: Photo[]): SectionStatus {
   if (slug === "photos") return getPhotoChecklistStatus(photos);
   if (slug === "damage") return getDamageReviewStatus(photos);
   if (slug === "other-party") return getOtherPartyStatus(incident);
   if (slug === "police") return getPoliceReportStatus(incident);
   if (slug === "witnesses") return getWitnessesStatus(incident);
+  if (slug === "account") return getAccountStatus(incident);
   return "needed";
 }

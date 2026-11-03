@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getAccountStatus,
   getDamageReviewStatus,
   getOtherPartyStatus,
   getPhotoChecklistStatus,
@@ -205,5 +206,36 @@ describe("getWitnessesStatus", () => {
 
   it("is done once at least one witness is added", () => {
     expect(getWitnessesStatus(withWitnesses("yes", [witness()]))).toBe("done");
+  });
+});
+
+function withAccount(account: Incident["account"]): Incident {
+  return { ...incident, account } as Incident;
+}
+
+describe("getAccountStatus", () => {
+  it("is needed before the user has written anything or drafted", () => {
+    expect(getAccountStatus(withAccount({ userWords: "", confirmed: false }))).toBe("needed");
+  });
+
+  it("is in_progress once the user has written something", () => {
+    expect(getAccountStatus(withAccount({ userWords: "I was hit from behind.", confirmed: false }))).toBe("in_progress");
+  });
+
+  it("is in_progress once drafted but not confirmed", () => {
+    const draft = {
+      account: "Account text.",
+      damageSchedule: [],
+      missingItems: [],
+      consistencyWarnings: [],
+      questionsForUser: [],
+      model: "mock",
+      draftedAt: new Date().toISOString(),
+    };
+    expect(getAccountStatus(withAccount({ userWords: "I was hit from behind.", draft, confirmed: false }))).toBe("in_progress");
+  });
+
+  it("is done once the account is confirmed", () => {
+    expect(getAccountStatus(withAccount({ userWords: "I was hit from behind.", finalText: "Account text.", confirmed: true }))).toBe("done");
   });
 });

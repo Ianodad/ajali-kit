@@ -1,5 +1,5 @@
 import { db } from "./db";
-import type { Incident, OtherParty, OwnVehicle, Photo, PoliceReport, StoredBlob, Witness } from "./types";
+import type { ClaimAccount, Incident, OtherParty, OwnVehicle, Photo, PoliceReport, StoredBlob, Witness } from "./types";
 
 function pad(n: number, width: number): string {
   return n.toString().padStart(width, "0");
@@ -204,4 +204,10 @@ export async function deleteWitness(incidentId: string, witnessId: string): Prom
   const incident = await getIncident(incidentId);
   if (!incident) return;
   await updateIncident(incidentId, { witnesses: incident.witnesses.filter((witness) => witness.id !== witnessId) });
+}
+
+export async function updateClaimAccount(incidentId: string, changes: Partial<ClaimAccount>): Promise<void> {
+  const incident = await getIncident(incidentId);
+  if (!incident) return;
+  await updateIncident(incidentId, { account: { ...incident.account, ...changes } });
 }
